@@ -29,6 +29,18 @@ function updateStats() {
   document.getElementById('total-count').textContent = totalCount;
 }
 
+function resetQuiz() {
+  incorrectWords = [];
+  correctCount = 0;
+  incorrectCount = 0;
+  totalCount = 0;
+  updateStats();
+  document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
+  document.getElementById('result').className = 'hint';
+  document.getElementById('next-btn').classList.add('hidden');
+  loadVocabulary();
+}
+
 function showNextWord() {
   const resultDiv = document.getElementById('result');
   resultDiv.textContent = 'Gib die Übersetzung ein und klicke auf Prüfen.';
@@ -110,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
+  document.getElementById('restart-btn').addEventListener('click', resetQuiz);
 
   document.getElementById('german-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
