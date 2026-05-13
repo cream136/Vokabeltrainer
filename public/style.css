@@ -376,23 +376,31 @@ h1 {
   width: 100%;
   text-align: center;
   display: block;
-  padding: 1rem 1.5rem;
+  padding: 0.85rem 1rem;
   background: white;
   border: 1px solid #d1d8ff;
-  border-radius: 16px;
+  border-radius: 14px;
   box-shadow: 0 2px 8px rgba(44, 79, 148, 0.08);
+  box-sizing: border-box;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #german-input {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
+  padding: 0.85rem 1rem;
   border: 1px solid #d1d8ff;
   border-radius: 14px;
   outline: none;
   transition: border-color 0.2s ease;
   font-size: 16px; /* Verhindert Zoom auf iOS */
   text-align: center;
+  box-sizing: border-box;
+  min-height: 48px;
 }
 
 #result {
