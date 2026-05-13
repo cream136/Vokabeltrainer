@@ -5,6 +5,7 @@ let currentWord = null;
 let correctCount = 0;
 let incorrectCount = 0;
 let totalCount = 0;
+let answeredWords = { correct: [], incorrect: [] };
 
 function shuffle(array) {
   const result = array.slice();
@@ -44,6 +45,30 @@ function updateStats() {
   document.getElementById('correct-count').textContent = correctCount;
   document.getElementById('incorrect-count').textContent = incorrectCount;
   document.getElementById('total-count').textContent = totalCount;
+
+  updateWordLists();
+}
+
+function updateWordLists() {
+  const correctList = document.getElementById('correct-words');
+  const incorrectList = document.getElementById('incorrect-words');
+
+  correctList.innerHTML = '';
+  incorrectList.innerHTML = '';
+
+  answeredWords.correct.forEach(word => {
+    const item = document.createElement('div');
+    item.className = 'word-list-item';
+    item.textContent = `${word.english} → ${word.german}`;
+    correctList.appendChild(item);
+  });
+
+  answeredWords.incorrect.forEach(word => {
+    const item = document.createElement('div');
+    item.className = 'word-list-item';
+    item.textContent = `${word.english} → ${word.german}`;
+    incorrectList.appendChild(item);
+  });
 }
 
 function renderUpcomingWords() {
@@ -118,6 +143,7 @@ function resetQuiz() {
   correctCount = 0;
   incorrectCount = 0;
   totalCount = 0;
+  answeredWords = { correct: [], incorrect: [] };
   updateStats();
   document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
   document.getElementById('result').className = 'hint';
@@ -186,6 +212,7 @@ async function checkAnswer(autoNext = false) {
       correctCount++;
       resultDiv.textContent = '✅ Richtig!';
       resultDiv.className = 'correct';
+      answeredWords.correct.push(currentWord);
     } else {
       incorrectCount++;
       resultDiv.textContent = `❌ Falsch! Richtige Antwort: ${data.correctAnswer}`;
@@ -193,6 +220,7 @@ async function checkAnswer(autoNext = false) {
       if (currentWord && !incorrectWords.some(v => v.english === currentWord.english)) {
         incorrectWords.push(currentWord);
       }
+      answeredWords.incorrect.push(currentWord);
     }
 
     updateStats();
