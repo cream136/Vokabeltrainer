@@ -124,11 +124,156 @@ body {
   .stats-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .container {
+    padding: 1rem;
+  }
 }
 
 @media (max-width: 700px) {
   .stats-panel {
     grid-template-columns: 1fr;
+  }
+
+  body {
+    padding: 0.5rem;
+  }
+
+  .container {
+    padding: 1rem;
+    border-radius: 16px;
+  }
+
+  .panel {
+    padding: 1rem;
+    min-height: auto;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .panel h2 {
+    font-size: 1.1rem;
+  }
+
+  .upcoming-item {
+    padding: 1rem;
+    font-size: 1rem;
+  }
+
+  .word-pair {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  #english-word {
+    font-size: 1.2rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+
+  #german-input {
+    min-width: auto;
+    padding: 1rem;
+    font-size: 1rem;
+  }
+
+  button {
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+  }
+
+  .add-row input {
+    padding: 1rem;
+    font-size: 1rem;
+  }
+
+  .add-row button {
+    min-width: auto;
+    min-height: 48px;
+  }
+
+  .button-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .button-row button {
+    width: 100%;
+  }
+
+  .stat-card {
+    padding: 0.75rem;
+  }
+
+  .stat-card strong {
+    font-size: 1.4rem;
+  }
+
+  .word-list {
+    max-height: 100px;
+  }
+
+  .word-list-item {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0.75rem;
+  }
+
+  .panel {
+    padding: 0.75rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+  }
+
+  .panel h2 {
+    font-size: 1rem;
+  }
+
+  .upcoming-item {
+    padding: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  #english-word {
+    font-size: 1.1rem;
+  }
+
+  #german-input {
+    padding: 0.875rem;
+  }
+
+  button {
+    min-height: 44px;
+    padding: 0.625rem 1.25rem;
+  }
+
+  .add-row input {
+    padding: 0.875rem;
+  }
+
+  .stat-card {
+    padding: 0.625rem;
+  }
+
+  .stat-card strong {
+    font-size: 1.3rem;
+  }
+
+  .word-list {
+    max-height: 80px;
   }
 }
 .add-row button {
@@ -187,6 +332,25 @@ h1 {
   border-radius: 8px;
   background: rgba(255,255,255,0.5);
   padding: 0.5rem;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+.word-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.word-list::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.3);
+  border-radius: 3px;
+}
+
+.word-list::-webkit-scrollbar-thumb {
+  background: rgba(122, 153, 255, 0.5);
+  border-radius: 3px;
+}
+
+.word-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(122, 153, 255, 0.7);
 }
 
 .word-list:empty {
@@ -230,18 +394,19 @@ h1 {
   text-align: left;
 }
 
-#german-input {
-  flex: 1;
-  min-width: 140px;
-  padding: 0.85rem 1rem;
-  font-size: 1rem;
+#german-input,
+.add-row input {
+  -webkit-appearance: none;
+  appearance: none;
   border: 1px solid #d1d8ff;
   border-radius: 14px;
   outline: none;
   transition: border-color 0.2s ease;
+  font-size: 16px; /* Verhindert Zoom auf iOS */
 }
 
-#german-input:focus {
+#german-input:focus,
+.add-row input:focus {
   border-color: #7a99ff;
   box-shadow: 0 0 0 4px rgba(122, 153, 255, 0.12);
 }
