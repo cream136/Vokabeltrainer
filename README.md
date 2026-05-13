@@ -20,7 +20,7 @@ Eine einfache Node.js-Anwendung zum Lernen von Vokabeln.
    npm start
    ```
 
-3. Öffne http://localhost:3000 in deinem Browser.
+3. Öffne http://localhost:3000 in deinem Browser. ggf. muss der Prozess beendet werden oder der Port 3001 geählt und in der Server.js angepasst werden
 
 4. Gib die deutsche Übersetzung für das englische Wort ein und klicke auf "Prüfen".
    - Richtig: Grün

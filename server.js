@@ -161,10 +161,10 @@ app.post('/api/add-word', (req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '172.16.1.141', () => {
   loadVocabulary();
   console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Server also accessible at http://0.0.0.0:${PORT} (for network access)`);
+  console.log(`Server also accessible at http://172.16.1.141:${PORT} (for network access)`);
 });
 
 server.on('error', (err) => {
