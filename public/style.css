@@ -358,8 +358,9 @@ h1 {
 
 .word-pair {
   display: grid;
+  grid-template-columns: 1fr;
   justify-items: center;
-  align-items: center;
+  align-items: stretch;
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding: 1.15rem;
@@ -374,6 +375,12 @@ h1 {
   color: #1f3a6d;
   width: 100%;
   text-align: center;
+  display: block;
+  padding: 1rem 1.5rem;
+  background: white;
+  border: 1px solid #d1d8ff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(44, 79, 148, 0.08);
 }
 
 #german-input {
