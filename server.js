@@ -161,14 +161,15 @@ app.post('/api/add-word', (req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   loadVocabulary();
   console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server also accessible at http://0.0.0.0:${PORT} (for network access)`);
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} ist bereits belegt. Starte stattdessen manuell mit PORT=3001 npm start oder beende den bestehenden Prozess.`);
+    console.error(`Port ${PORT} ist bereits belegt. Versuche einen anderen Port mit PORT=3000 node server.js`);
   } else {
     console.error('Serverfehler:', err);
   }
