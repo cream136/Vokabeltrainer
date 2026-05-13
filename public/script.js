@@ -54,7 +54,7 @@ function showNextWord() {
   document.getElementById('next-btn').classList.add('hidden');
 }
 
-async function checkAnswer() {
+async function checkAnswer(autoNext = false) {
   const english = document.getElementById('english-word').textContent;
   const german = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
@@ -94,6 +94,12 @@ async function checkAnswer() {
     updateStats();
     document.getElementById('check-btn').disabled = true;
     document.getElementById('next-btn').classList.remove('hidden');
+
+    if (autoNext) {
+      setTimeout(() => {
+        showNextWord();
+      }, 2000);
+    }
   } catch (error) {
     console.error('Fehler beim Prüfen der Antwort:', error);
   }
@@ -102,12 +108,13 @@ async function checkAnswer() {
 document.addEventListener('DOMContentLoaded', () => {
   loadVocabulary();
 
-  document.getElementById('check-btn').addEventListener('click', checkAnswer);
+  document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
 
   document.getElementById('german-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      checkAnswer();
+      e.preventDefault();
+      checkAnswer(true);
     }
   });
 });
