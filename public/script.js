@@ -75,7 +75,7 @@ function renderUpcomingWords() {
   const list = document.getElementById('upcoming-list');
   list.innerHTML = '';
 
-  const nextWords = incorrectWords.length > 0 ? incorrectWords.slice(0, 2) : wordQueue.slice(0, 2);
+  const nextWords = incorrectWords.length > 0 ? incorrectWords.slice(0, 3) : wordQueue.slice(0, 3);
   if (nextWords.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'upcoming-item';

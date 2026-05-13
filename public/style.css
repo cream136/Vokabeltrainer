@@ -30,9 +30,13 @@ body {
   margin-bottom: 1.5rem;
 }
 
-.preview-panel,
+.preview-panel {
+  min-height: auto;
+  height: auto;
+}
+
 .quiz-panel {
-  text-align: left;
+  min-height: 420px;
 }
 
 .panel {
@@ -94,6 +98,15 @@ body {
   border-radius: 14px;
   background: white;
   font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.add-row input:first-child {
+  border-radius: 14px 0 0 14px;
+}
+
+.add-row input:nth-child(2) {
+  border-radius: 0 14px 14px 0;
 }
 
 .add-word-panel {
@@ -379,7 +392,7 @@ h1 {
   padding: 0.85rem 1rem;
   background: white;
   border: 1px solid #d1d8ff;
-  border-radius: 14px;
+  border-radius: 14px 14px 0 0;
   box-shadow: 0 2px 8px rgba(44, 79, 148, 0.08);
   box-sizing: border-box;
   min-height: 48px;
