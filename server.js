@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = 'vocabulary.json';
 
 // Middleware
@@ -44,12 +44,28 @@ function loadVocabulary() {
       }
     }
 
+    const englishIndex = new Map();
+    const germanIndex = new Map();
+    storedVocabulary.forEach(item => {
+      if (item.english) {
+        englishIndex.set(item.english.toLowerCase(), item);
+      }
+      if (item.german) {
+        germanIndex.set(item.german.toLowerCase(), item);
+      }
+    });
+
     let changed = false;
     csvVocabulary.forEach(csvItem => {
-      const match = storedVocabulary.find(item =>
-        (item.english && csvItem.english && item.english.toLowerCase() === csvItem.english.toLowerCase()) ||
-        (item.german && csvItem.german && item.german.toLowerCase() === csvItem.german.toLowerCase())
-      );
+      const englishKey = csvItem.english.toLowerCase();
+      const germanKey = csvItem.german.toLowerCase();
+      let match = null;
+
+      if (csvItem.english && englishIndex.has(englishKey)) {
+        match = englishIndex.get(englishKey);
+      } else if (csvItem.german && germanIndex.has(germanKey)) {
+        match = germanIndex.get(germanKey);
+      }
 
       if (match) {
         if (!match.english && csvItem.english) {
@@ -60,8 +76,10 @@ function loadVocabulary() {
           match.german = csvItem.german;
           changed = true;
         }
-      } else if (csvItem.english && csvItem.german) {
+      } else {
         storedVocabulary.push(csvItem);
+        if (csvItem.english) englishIndex.set(englishKey, csvItem);
+        if (csvItem.german) germanIndex.set(germanKey, csvItem);
         changed = true;
       }
     });

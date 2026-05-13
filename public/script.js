@@ -1,5 +1,4 @@
 let vocabulary = [];
-let currentIndex = 0;
 let incorrectWords = [];
 let correctCount = 0;
 let incorrectCount = 0;
@@ -39,8 +38,8 @@ function showNextWord() {
   if (incorrectWords.length > 0) {
     word = incorrectWords.shift();
   } else if (vocabulary.length > 0) {
-    word = vocabulary[currentIndex % vocabulary.length];
-    currentIndex++;
+    const randomIndex = Math.floor(Math.random() * vocabulary.length);
+    word = vocabulary[randomIndex];
   } else {
     document.getElementById('english-word').textContent = 'Keine Wörter verfügbar';
     document.getElementById('german-input').value = '';
