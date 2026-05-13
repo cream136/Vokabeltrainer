@@ -9,6 +9,30 @@
 <body>
   <div class="container">
     <h1>Vokabeltrainer</h1>
+
+    <div class="content-grid">
+      <section class="panel left-panel">
+        <h2>Bevorstehende Wörter</h2>
+        <div id="upcoming-list" class="upcoming-list">
+          <div class="empty">Lädt...</div>
+        </div>
+      </section>
+
+      <section class="panel right-panel">
+        <h2>Neue Wörter hinzufügen</h2>
+        <div id="drop-zone" class="drop-zone">
+          Ziehe hier eine CSV- oder Textdatei hinein
+        </div>
+        <textarea id="bulk-input" placeholder="englich,deutsch pro Zeile"></textarea>
+        <button id="add-bulk-btn" class="secondary">Bulk hinzufügen</button>
+        <div class="add-row">
+          <input type="text" id="new-english" placeholder="English">
+          <input type="text" id="new-german" placeholder="German">
+          <button id="add-word-btn">Hinzufügen</button>
+        </div>
+      </section>
+    </div>
+
     <div class="stats-panel">
       <div class="stat-card">
         <span>Richtig</span>
@@ -36,6 +60,7 @@
       </div>
       <div id="result"></div>
     </div>
+
     <div class="button-row">
       <button id="next-btn" class="hidden">Nächstes Wort</button>
       <button id="restart-btn" class="secondary">Neu starten</button>

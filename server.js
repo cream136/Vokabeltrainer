@@ -118,7 +118,15 @@ app.post('/api/check', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   loadVocabulary();
   console.log(`Server running at http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} ist bereits belegt. Starte stattdessen manuell mit PORT=3001 npm start oder beende den bestehenden Prozess.`);
+  } else {
+    console.error('Serverfehler:', err);
+  }
 });
