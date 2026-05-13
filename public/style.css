@@ -180,6 +180,33 @@ h1 {
   color: #162753;
 }
 
+.word-list {
+  margin-top: 0.75rem;
+  max-height: 120px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.5);
+  padding: 0.5rem;
+}
+
+.word-list:empty {
+  display: none;
+}
+
+.word-list-item {
+  padding: 0.25rem 0.5rem;
+  margin-bottom: 0.25rem;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #162753;
+  border: 1px solid #e1e7ff;
+}
+
+.word-list-item:last-child {
+  margin-bottom: 0;
+}
+
 .stat-card.total-words {
   grid-column: span 2;
 }
