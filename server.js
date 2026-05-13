@@ -22,6 +22,24 @@ function saveVocabularyFile(data) {
   }
 }
 
+function escapeCsv(value) {
+  const text = value.toString().trim();
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+  return text;
+}
+
+function appendCsvWord(word) {
+  try {
+    const line = `\n${escapeCsv(word.english)},${escapeCsv(word.german)}`;
+    fs.appendFileSync('vocabulary.csv', line, 'utf8');
+  } catch (error) {
+    console.error('Error appending word to CSV:', error);
+    throw error;
+  }
+}
+
 function loadVocabulary() {
   try {
     const workbook = XLSX.readFile('vocabulary.csv');
@@ -114,6 +132,31 @@ app.post('/api/check', (req, res) => {
     res.json({ correct: isCorrect, correctAnswer: correct.german });
   } else {
     res.json({ correct: false, correctAnswer: 'Unknown word' });
+  }
+});
+
+app.post('/api/add-word', (req, res) => {
+  const english = (req.body.english || '').toString().trim();
+  const german = (req.body.german || '').toString().trim();
+
+  if (!english || !german) {
+    return res.status(400).json({ success: false, message: 'Beide Felder müssen ausgefüllt sein.' });
+  }
+
+  const exists = vocabulary.some(v => v.english.toLowerCase() === english.toLowerCase());
+  if (exists) {
+    return res.status(409).json({ success: false, message: 'Dieses Wort existiert bereits.' });
+  }
+
+  const newWord = { english, german };
+  vocabulary.push(newWord);
+
+  try {
+    appendCsvWord(newWord);
+    saveVocabularyFile(vocabulary);
+    res.json({ success: true, word: newWord });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Fehler beim Speichern des Wortes.' });
   }
 });
 

@@ -50,5 +50,13 @@
   {
     "english": "home",
     "german": "haus"
+  },
+  {
+    "english": "work",
+    "german": "arbeit"
+  },
+  {
+    "english": "phone",
+    "german": "handy"
   }
 ]

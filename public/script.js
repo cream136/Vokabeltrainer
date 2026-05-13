@@ -50,8 +50,8 @@ function renderUpcomingWords() {
   const list = document.getElementById('upcoming-list');
   list.innerHTML = '';
 
-  const nextItem = incorrectWords.length > 0 ? incorrectWords[0] : wordQueue[0];
-  if (!nextItem) {
+  const nextWords = incorrectWords.length > 0 ? incorrectWords.slice(0, 2) : wordQueue.slice(0, 2);
+  if (nextWords.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'upcoming-item';
     empty.textContent = 'Keine bevorstehenden Wörter verfügbar.';
@@ -59,47 +59,62 @@ function renderUpcomingWords() {
     return;
   }
 
-  const row = document.createElement('div');
-  row.className = 'upcoming-item';
-  row.textContent = nextItem.english;
-  list.appendChild(row);
+  nextWords.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'upcoming-item';
+    row.textContent = `${index + 1}. ${item.english}`;
+    list.appendChild(row);
+  });
 }
 
-function addNewWord() {
+async function addNewWord() {
   const englishInput = document.getElementById('new-english');
   const germanInput = document.getElementById('new-german');
   const english = englishInput.value.trim();
   const german = germanInput.value.trim();
+  const resultDiv = document.getElementById('result');
 
   if (!english || !german) {
-    const resultDiv = document.getElementById('result');
     resultDiv.textContent = 'Bitte beide Felder ausfüllen.';
     resultDiv.className = 'hint';
     return;
   }
 
-  const exists = vocabulary.some(v => v.english.toLowerCase() === english.toLowerCase());
-  if (exists) {
-    const resultDiv = document.getElementById('result');
-    resultDiv.textContent = 'Dieses englische Wort existiert bereits.';
+  try {
+    const response = await fetch('/api/add-word', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ english, german })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      resultDiv.textContent = data.message || 'Fehler beim Hinzufügen.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+
+    vocabulary.push(data.word);
+    wordQueue.push(data.word);
+    document.getElementById('total-words').textContent = vocabulary.length;
+    renderUpcomingWords();
+    englishInput.value = '';
+    germanInput.value = '';
+    englishInput.focus();
+
+    resultDiv.textContent = `Wort hinzugefügt: ${english} → ${german}`;
+    resultDiv.className = 'correct';
+  } catch (error) {
+    resultDiv.textContent = 'Fehler beim Hinzufügen. Bitte versuche es erneut.';
     resultDiv.className = 'incorrect';
-    return;
+    console.error('Add word failed', error);
   }
-
-  vocabulary.push({ english, german });
-  document.getElementById('total-words').textContent = vocabulary.length;
-  renderUpcomingWords();
-  englishInput.value = '';
-  germanInput.value = '';
-  englishInput.focus();
-
-  const resultDiv = document.getElementById('result');
-  resultDiv.textContent = `Wort hinzugefügt: ${english} → ${german}`;
-  resultDiv.className = 'correct';
 }
 
 function resetQuiz() {
   incorrectWords = [];
+  wordQueue = [];
+  currentWord = null;
   correctCount = 0;
   incorrectCount = 0;
   totalCount = 0;
