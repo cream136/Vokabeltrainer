@@ -1,0 +1,42 @@
+[
+  {
+    "english": "hello",
+    "german": "hallo"
+  },
+  {
+    "english": "world",
+    "german": "welt"
+  },
+  {
+    "english": "cat",
+    "german": "katze"
+  },
+  {
+    "english": "dog",
+    "german": "hund"
+  },
+  {
+    "english": "house",
+    "german": "haus"
+  },
+  {
+    "english": "car",
+    "german": "auto"
+  },
+  {
+    "english": "book",
+    "german": "buch"
+  },
+  {
+    "english": "water",
+    "german": "wasser"
+  },
+  {
+    "english": "food",
+    "german": "essen"
+  },
+  {
+    "english": "school",
+    "german": "schule"
+  }
+]

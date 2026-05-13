@@ -9,15 +9,34 @@
 <body>
   <div class="container">
     <h1>Vokabeltrainer</h1>
+    <div class="stats-panel">
+      <div class="stat-card">
+        <span>Richtig</span>
+        <strong id="correct-count">0</strong>
+      </div>
+      <div class="stat-card">
+        <span>Falsch</span>
+        <strong id="incorrect-count">0</strong>
+      </div>
+      <div class="stat-card">
+        <span>Versuche</span>
+        <strong id="total-count">0</strong>
+      </div>
+      <div class="stat-card total-words">
+        <span>Gesamt</span>
+        <strong id="total-words">0</strong>
+      </div>
+    </div>
+
     <div id="word-container">
       <div class="word-pair">
-        <span id="english-word"></span>
-        <input type="text" id="german-input" placeholder="Deutsche Übersetzung">
+        <span id="english-word">Lädt...</span>
+        <input type="text" id="german-input" placeholder="Deutsche Übersetzung" autocomplete="off">
         <button id="check-btn">Prüfen</button>
       </div>
       <div id="result"></div>
     </div>
-    <button id="next-btn">Nächstes Wort</button>
+    <button id="next-btn" class="hidden">Nächstes Wort</button>
   </div>
   <script src="script.js"></script>
 </body>

@@ -1,13 +1,21 @@
 let vocabulary = [];
 let currentIndex = 0;
 let incorrectWords = [];
+let correctCount = 0;
+let incorrectCount = 0;
+let totalCount = 0;
 
 async function loadVocabulary() {
   try {
     const response = await fetch('/api/vocabulary');
     vocabulary = await response.json();
+    document.getElementById('total-words').textContent = vocabulary.length;
+    updateStats();
+
     if (vocabulary.length === 0) {
-      alert('Keine Vokabeln gefunden. Bitte stellen Sie sicher, dass vocabulary.xlsx im Projektordner vorhanden ist.');
+      alert('Keine Vokabeln gefunden. Bitte stellen Sie sicher, dass vocabulary.csv im Projektordner vorhanden ist.');
+      document.getElementById('english-word').textContent = 'Keine Wörter verfügbar';
+      document.getElementById('check-btn').disabled = true;
       return;
     }
     showNextWord();
@@ -16,10 +24,16 @@ async function loadVocabulary() {
   }
 }
 
+function updateStats() {
+  document.getElementById('correct-count').textContent = correctCount;
+  document.getElementById('incorrect-count').textContent = incorrectCount;
+  document.getElementById('total-count').textContent = totalCount;
+}
+
 function showNextWord() {
   const resultDiv = document.getElementById('result');
-  resultDiv.textContent = '';
-  resultDiv.className = '';
+  resultDiv.textContent = 'Gib die Übersetzung ein und klicke auf Prüfen.';
+  resultDiv.className = 'hint';
 
   let word;
   if (incorrectWords.length > 0) {
@@ -46,6 +60,12 @@ async function checkAnswer() {
   const german = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
 
+  if (!german) {
+    resultDiv.textContent = 'Bitte gib eine Antwort ein.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
   try {
     const response = await fetch('/api/check', {
       method: 'POST',
@@ -56,20 +76,23 @@ async function checkAnswer() {
     });
 
     const data = await response.json();
+    totalCount++;
 
     if (data.correct) {
-      resultDiv.textContent = 'Richtig!';
+      correctCount++;
+      resultDiv.textContent = '✅ Richtig!';
       resultDiv.className = 'correct';
     } else {
-      resultDiv.textContent = `Falsch! Richtige Antwort: ${data.correctAnswer}`;
+      incorrectCount++;
+      resultDiv.textContent = `❌ Falsch! Richtige Antwort: ${data.correctAnswer}`;
       resultDiv.className = 'incorrect';
-      // Add to incorrect words for repetition
       const currentWord = vocabulary.find(v => v.english === english);
-      if (currentWord) {
+      if (currentWord && !incorrectWords.some(v => v.english === currentWord.english)) {
         incorrectWords.push(currentWord);
       }
     }
 
+    updateStats();
     document.getElementById('check-btn').disabled = true;
     document.getElementById('next-btn').classList.remove('hidden');
   } catch (error) {
