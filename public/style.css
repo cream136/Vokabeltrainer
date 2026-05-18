@@ -310,6 +310,48 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+.dataset-row,
+.dataset-create-row,
+.dataset-rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.dataset-row label,
+.dataset-create-row label,
+.dataset-rename-row label {
+  font-weight: 700;
+  color: #1f3a6d;
+}
+
+.dataset-row select,
+.dataset-create-row input,
+.dataset-rename-row input {
+  min-width: 240px;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d1d8ff;
+  border-radius: 14px;
+  background: white;
+  color: #162753;
+  font-size: 1rem;
+}
+
+.dataset-create-row button,
+.dataset-rename-row button {
+  min-width: 140px;
+  background-color: #4f6cff;
+  color: white;
+  border: none;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(79, 108, 255, 0.18);
+}
+
 .stats-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 1fr));
@@ -361,7 +403,7 @@ h1 {
   border: 1px solid #e1e7ff;
 }
 
-..word-list-item:last-child {
+.word-list-item:last-child {
   margin-bottom: 0;
 }
 

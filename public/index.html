@@ -17,6 +17,23 @@
   <div class="container">
     <h1>Vokabeltrainer</h1>
 
+    <div class="dataset-row">
+      <label for="dataset-select">Dataset wählen:</label>
+      <select id="dataset-select"></select>
+    </div>
+
+    <div class="dataset-create-row">
+      <label for="dataset-name">Neues Dataset erstellen:</label>
+      <input id="dataset-name" type="text" placeholder="Name ohne Extension" autocomplete="off">
+      <button id="create-dataset-btn">Erstellen</button>
+    </div>
+
+    <div class="dataset-rename-row">
+      <label for="dataset-rename">Dataset umbenennen:</label>
+      <input id="dataset-rename" type="text" placeholder="Neuer Name ohne Extension" autocomplete="off">
+      <button id="rename-dataset-btn">Umbenennen</button>
+    </div>
+
     <div class="top-grid">
       <section class="panel preview-panel">
         <h2>Vorschau</h2>

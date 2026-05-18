@@ -6,6 +6,7 @@ let correctCount = 0;
 let incorrectCount = 0;
 let totalCount = 0;
 let answeredWords = { correct: [], incorrect: [] };
+let selectedDataset = '';
 
 function shuffle(array) {
   const result = array.slice();
@@ -20,9 +21,135 @@ function rebuildQueue() {
   wordQueue = shuffle(vocabulary.map(item => ({ ...item })));
 }
 
-async function loadVocabulary() {
+async function loadDatasets() {
   try {
-    const response = await fetch('/api/vocabulary');
+    const response = await fetch('/api/datasets');
+    const data = await response.json();
+    const select = document.getElementById('dataset-select');
+    select.innerHTML = '';
+
+    if (!data.datasets || data.datasets.length === 0) {
+      select.innerHTML = '<option value="">Keine Datensätze gefunden</option>';
+      selectedDataset = '';
+      return;
+    }
+
+    data.datasets.forEach(dataset => {
+      const option = document.createElement('option');
+      option.value = dataset.name;
+      option.textContent = dataset.label;
+      if (dataset.name === data.defaultDataset) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+
+    selectedDataset = data.defaultDataset || data.datasets[0].name;
+  } catch (error) {
+    console.error('Fehler beim Laden der Datensätze:', error);
+  }
+}
+
+async function createDataset() {
+  const input = document.getElementById('dataset-name');
+  const resultDiv = document.getElementById('result');
+  const name = input.value.trim();
+
+  if (!name) {
+    resultDiv.textContent = 'Bitte vergib einen Namen für das neue Dataset.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/datasets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+
+    const data = await response.json();
+    if (!response.ok && response.status !== 409) {
+      resultDiv.textContent = data.message || 'Fehler beim Erstellen des Datasets.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+
+    await loadDatasets();
+    selectedDataset = data.dataset || name;
+    document.getElementById('dataset-select').value = selectedDataset;
+    await loadVocabulary(selectedDataset);
+
+    resultDiv.textContent = response.status === 409 ?
+      `Dataset existiert bereits: ${selectedDataset}` :
+      `Dataset erstellt: ${selectedDataset}`;
+    resultDiv.className = 'correct';
+    input.value = '';
+  } catch (error) {
+    resultDiv.textContent = 'Fehler beim Erstellen des Datasets. Bitte versuche es erneut.';
+    resultDiv.className = 'incorrect';
+    console.error('Create dataset failed', error);
+  }
+}
+
+async function renameDataset() {
+  const input = document.getElementById('dataset-rename');
+  const resultDiv = document.getElementById('result');
+  const name = input.value.trim();
+
+  if (!selectedDataset) {
+    resultDiv.textContent = 'Bitte wähle zuerst ein Dataset aus.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  if (!name) {
+    resultDiv.textContent = 'Bitte gib einen neuen Namen ein.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/datasets/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldName: selectedDataset, newName: name })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      resultDiv.textContent = data.message || 'Fehler beim Umbenennen des Datasets.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+
+    await loadDatasets();
+    selectedDataset = data.dataset;
+    document.getElementById('dataset-select').value = selectedDataset;
+    await loadVocabulary(selectedDataset);
+
+    resultDiv.textContent = `Dataset umbenannt in ${selectedDataset}`;
+    resultDiv.className = 'correct';
+    input.value = '';
+  } catch (error) {
+    resultDiv.textContent = 'Fehler beim Umbenennen des Datasets. Bitte versuche es erneut.';
+    resultDiv.className = 'incorrect';
+    console.error('Rename dataset failed', error);
+  }
+}
+
+async function loadVocabulary(dataset = selectedDataset) {
+  if (!dataset) {
+    await loadDatasets();
+    dataset = selectedDataset;
+  }
+
+  try {
+    const response = await fetch(`/api/vocabulary?dataset=${encodeURIComponent(dataset)}`);
+    if (!response.ok) {
+      throw new Error('Dataset konnte nicht geladen werden.');
+    }
+
     vocabulary = await response.json();
     document.getElementById('total-words').textContent = vocabulary.length;
     updateStats();
@@ -30,7 +157,8 @@ async function loadVocabulary() {
     renderUpcomingWords();
 
     if (vocabulary.length === 0) {
-      alert('Keine Vokabeln gefunden. Bitte stellen Sie sicher, dass vocabulary.csv im Projektordner vorhanden ist.');
+      const label = document.querySelector('#dataset-select option:checked')?.textContent || 'Ausgewählter Datensatz';
+      alert(`Keine Vokabeln im Datensatz ${label} gefunden.`);
       document.getElementById('english-word').textContent = 'Keine Wörter verfügbar';
       document.getElementById('check-btn').disabled = true;
       return;
@@ -38,6 +166,8 @@ async function loadVocabulary() {
     showNextWord();
   } catch (error) {
     console.error('Fehler beim Laden der Vokabeln:', error);
+    document.getElementById('result').textContent = 'Fehler beim Laden des Datensatzes.';
+    document.getElementById('result').className = 'incorrect';
   }
 }
 
@@ -109,7 +239,7 @@ async function addNewWord() {
     const response = await fetch('/api/add-word', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ english, german })
+      body: JSON.stringify({ english, german, dataset: selectedDataset })
     });
 
     const data = await response.json();
@@ -136,7 +266,11 @@ async function addNewWord() {
   }
 }
 
-function resetQuiz() {
+function resetQuiz(dataset = selectedDataset) {
+  if (dataset) {
+    selectedDataset = dataset;
+  }
+
   incorrectWords = [];
   wordQueue = [];
   currentWord = null;
@@ -148,7 +282,7 @@ function resetQuiz() {
   document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
   document.getElementById('result').className = 'hint';
   document.getElementById('next-btn').classList.add('hidden');
-  loadVocabulary();
+  loadVocabulary(selectedDataset);
 }
 
 function getNextWordFromQueue() {
@@ -237,12 +371,21 @@ async function checkAnswer(autoNext = false) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadVocabulary();
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadDatasets();
+  await loadVocabulary();
+
+  document.getElementById('dataset-select').addEventListener('change', async (event) => {
+    selectedDataset = event.target.value;
+    resetQuiz(selectedDataset);
+  });
+
+  document.getElementById('create-dataset-btn').addEventListener('click', createDataset);
+  document.getElementById('rename-dataset-btn').addEventListener('click', renameDataset);
 
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
-  document.getElementById('restart-btn').addEventListener('click', resetQuiz);
+  document.getElementById('restart-btn').addEventListener('click', () => resetQuiz(selectedDataset));
   document.getElementById('add-word-btn').addEventListener('click', addNewWord);
 
   document.getElementById('german-input').addEventListener('keypress', (e) => {

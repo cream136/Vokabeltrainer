@@ -5,22 +5,14 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = 'vocabulary.json';
+const DATA_DIR = path.resolve(__dirname);
+const DEFAULT_DATA_FILE = 'vocabulary.csv';
 
-// Middleware
+let vocabulary = [];
+let currentDataset = DEFAULT_DATA_FILE;
+
 app.use(express.json());
 app.use(express.static('public'));
-
-// Load vocabulary from Excel and keep a local cache for startup sync
-let vocabulary = [];
-
-function saveVocabularyFile(data) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error('Error saving vocabulary cache:', error);
-  }
-}
 
 function escapeCsv(value) {
   const text = value.toString().trim();
@@ -30,98 +22,210 @@ function escapeCsv(value) {
   return text;
 }
 
-function appendCsvWord(word) {
-  try {
+function getDatasetFiles() {
+  const files = fs.readdirSync(DATA_DIR);
+  const datasets = files
+    .filter(file => /\.(csv|xlsx)$/i.test(file))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+  if (!datasets.includes(DEFAULT_DATA_FILE) && fs.existsSync(path.join(DATA_DIR, DEFAULT_DATA_FILE))) {
+    datasets.unshift(DEFAULT_DATA_FILE);
+  }
+
+  return datasets;
+}
+
+function normalizeDatasetName(name, defaultExtension = '.csv') {
+  const safeName = path.basename(name || '').trim();
+  if (!safeName) {
+    return null;
+  }
+
+  const normalized = safeName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const ext = path.extname(normalized).toLowerCase();
+
+  if (ext === '.csv' || ext === '.xlsx') {
+    return normalized;
+  }
+
+  return `${normalized}${defaultExtension}`;
+}
+
+function resolveDatasetPath(dataset) {
+  const safeName = path.basename(dataset || '');
+  if (!/\.(csv|xlsx)$/i.test(safeName)) {
+    return null;
+  }
+
+  const filePath = path.join(DATA_DIR, safeName);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  return filePath;
+}
+
+function normalizeCell(value) {
+  return value === undefined || value === null ? '' : value.toString().trim();
+}
+
+function loadDataset(dataset) {
+  const filePath = resolveDatasetPath(dataset);
+  if (!filePath) {
+    throw new Error('Dataset not found');
+  }
+
+  const workbook = XLSX.readFile(filePath, { cellDates: true, raw: false });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { defval: '' }) : [];
+
+  const englishKeys = ['English', 'english', 'Englisch', 'englisch'];
+  const germanKeys = ['German', 'german', 'Deutsch', 'deutsch'];
+
+  const findKey = (row, keys) => keys.find(key => Object.prototype.hasOwnProperty.call(row, key));
+
+  return rows
+    .map(row => {
+      const rowKeys = Object.keys(row);
+      const englishKey = findKey(row, englishKeys);
+      const germanKey = findKey(row, germanKeys);
+
+      const english = normalizeCell(englishKey ? row[englishKey] : rowKeys[0] ? row[rowKeys[0]] : '');
+      const german = normalizeCell(germanKey ? row[germanKey] : rowKeys[1] ? row[rowKeys[1]] : '');
+
+      return { english, german };
+    })
+    .filter(item => item.english && item.german);
+}
+
+function saveWordToDataset(dataset, word) {
+  const filePath = resolveDatasetPath(dataset);
+  if (!filePath) {
+    throw new Error('Dataset not found');
+  }
+
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === '.csv') {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, 'English,German\n', 'utf8');
+    }
     const line = `\n${escapeCsv(word.english)},${escapeCsv(word.german)}`;
-    fs.appendFileSync('vocabulary.csv', line, 'utf8');
-  } catch (error) {
-    console.error('Error appending word to CSV:', error);
-    throw error;
+    fs.appendFileSync(filePath, line, 'utf8');
+    return;
   }
+
+  const workbook = fs.existsSync(filePath) ? XLSX.readFile(filePath, { cellDates: true, raw: false }) : XLSX.utils.book_new();
+  const sheetName = workbook.SheetNames[0] || 'Sheet1';
+  const worksheet = workbook.Sheets[sheetName];
+  const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { defval: '' }) : [];
+
+  rows.push({ English: word.english, German: word.german });
+  const newWorksheet = XLSX.utils.json_to_sheet(rows, { skipHeader: false });
+  workbook.Sheets[sheetName] = newWorksheet;
+  if (!workbook.SheetNames.includes(sheetName)) {
+    workbook.SheetNames.push(sheetName);
+  }
+
+  XLSX.writeFile(workbook, filePath);
 }
 
-function loadVocabulary() {
+function getDatasetList() {
+  return getDatasetFiles().map(name => ({
+    name,
+    label: name.replace(/\.(csv|xlsx)$/i, '')
+  }));
+}
+
+function loadVocabulary(dataset = DEFAULT_DATA_FILE) {
+  const validDataset = resolveDatasetPath(dataset) ? dataset : DEFAULT_DATA_FILE;
+  currentDataset = validDataset;
+  vocabulary = loadDataset(currentDataset);
+  console.log(`Loaded ${vocabulary.length} words from dataset ${currentDataset}`);
+}
+
+app.get('/api/datasets', (req, res) => {
+  const datasets = getDatasetList();
+  res.json({ datasets, defaultDataset: currentDataset || (datasets[0] && datasets[0].name) || DEFAULT_DATA_FILE });
+});
+
+app.post('/api/datasets', (req, res) => {
+  const nameRaw = (req.body.name || '').toString().trim();
+  const name = normalizeDatasetName(nameRaw);
+
+  if (!name) {
+    return res.status(400).json({ success: false, message: 'Ungültiger Dateiname.' });
+  }
+
+  const filePath = path.join(DATA_DIR, name);
+  if (fs.existsSync(filePath)) {
+    return res.status(409).json({ success: false, message: 'Dataset existiert bereits.', dataset: name });
+  }
+
   try {
-    const workbook = XLSX.readFile('vocabulary.csv');
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-
-    const csvVocabulary = data.map(row => ({
-      english: (row.English || row.english || '').toString().trim(),
-      german: (row.German || row.german || '').toString().trim()
-    })).filter(item => item.english || item.german);
-
-    let storedVocabulary = [];
-    if (fs.existsSync(DATA_FILE)) {
-      try {
-        storedVocabulary = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) || [];
-      } catch (error) {
-        console.warn('Could not parse saved vocabulary cache. Recreating from CSV.');
-        storedVocabulary = [];
-      }
+    if (path.extname(name).toLowerCase() === '.csv') {
+      fs.writeFileSync(filePath, 'English,German\n', 'utf8');
+    } else {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet([['English', 'German']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+      XLSX.writeFile(workbook, filePath);
     }
 
-    const englishIndex = new Map();
-    const germanIndex = new Map();
-    storedVocabulary.forEach(item => {
-      if (item.english) {
-        englishIndex.set(item.english.toLowerCase(), item);
-      }
-      if (item.german) {
-        germanIndex.set(item.german.toLowerCase(), item);
-      }
-    });
-
-    let changed = false;
-    csvVocabulary.forEach(csvItem => {
-      const englishKey = csvItem.english.toLowerCase();
-      const germanKey = csvItem.german.toLowerCase();
-      let match = null;
-
-      if (csvItem.english && englishIndex.has(englishKey)) {
-        match = englishIndex.get(englishKey);
-      } else if (csvItem.german && germanIndex.has(germanKey)) {
-        match = germanIndex.get(germanKey);
-      }
-
-      if (match) {
-        if (!match.english && csvItem.english) {
-          match.english = csvItem.english;
-          changed = true;
-        }
-        if (!match.german && csvItem.german) {
-          match.german = csvItem.german;
-          changed = true;
-        }
-      } else {
-        storedVocabulary.push(csvItem);
-        if (csvItem.english) englishIndex.set(englishKey, csvItem);
-        if (csvItem.german) germanIndex.set(germanKey, csvItem);
-        changed = true;
-      }
-    });
-
-    if (!fs.existsSync(DATA_FILE) || changed) {
-      saveVocabularyFile(storedVocabulary);
-    }
-
-    vocabulary = storedVocabulary.filter(item => item.english && item.german);
-    console.log(`Loaded ${vocabulary.length} vocabulary pairs from CSV and cache (${csvVocabulary.length} entries scanned)`);
+    res.status(201).json({ success: true, dataset: name });
   } catch (error) {
-    console.error('Error loading vocabulary:', error);
-    vocabulary = [
-      { english: 'hello', german: 'hallo' },
-      { english: 'world', german: 'welt' },
-      { english: 'cat', german: 'katze' },
-      { english: 'dog', german: 'hund' }
-    ];
+    console.error('Error creating dataset:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Erstellen des Datasets.' });
   }
-}
+});
 
-// API endpoints
+app.post('/api/datasets/rename', (req, res) => {
+  const oldName = (req.body.oldName || '').toString().trim();
+  const newNameRaw = (req.body.newName || '').toString().trim();
+  const oldPath = resolveDatasetPath(oldName);
+
+  if (!oldPath) {
+    return res.status(404).json({ success: false, message: 'Das ausgewählte Dataset wurde nicht gefunden.' });
+  }
+
+  if (!newNameRaw) {
+    return res.status(400).json({ success: false, message: 'Bitte gib einen neuen Namen ein.' });
+  }
+
+  const defaultExtension = path.extname(oldName).toLowerCase() || '.csv';
+  const newName = normalizeDatasetName(newNameRaw, defaultExtension);
+  const newPath = path.join(DATA_DIR, newName);
+
+  if (oldName === newName) {
+    return res.status(400).json({ success: false, message: 'Der neue Name ist identisch zum bestehenden Namen.' });
+  }
+
+  if (fs.existsSync(newPath)) {
+    return res.status(409).json({ success: false, message: 'Ein Dataset mit diesem Namen existiert bereits.' });
+  }
+
+  try {
+    fs.renameSync(oldPath, newPath);
+    if (currentDataset === oldName) {
+      currentDataset = newName;
+    }
+    res.json({ success: true, dataset: newName });
+  } catch (error) {
+    console.error('Error renaming dataset:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Umbenennen des Datasets.' });
+  }
+});
+
 app.get('/api/vocabulary', (req, res) => {
-  res.json(vocabulary);
+  const dataset = req.query.dataset || currentDataset;
+  try {
+    loadVocabulary(dataset);
+    res.json(vocabulary);
+  } catch (error) {
+    console.error('Error loading dataset:', error);
+    res.status(500).json({ error: 'Dataset konnte nicht geladen werden.' });
+  }
 });
 
 app.post('/api/check', (req, res) => {
@@ -138,9 +242,14 @@ app.post('/api/check', (req, res) => {
 app.post('/api/add-word', (req, res) => {
   const english = (req.body.english || '').toString().trim();
   const german = (req.body.german || '').toString().trim();
+  const dataset = req.body.dataset || currentDataset;
 
   if (!english || !german) {
     return res.status(400).json({ success: false, message: 'Beide Felder müssen ausgefüllt sein.' });
+  }
+
+  if (!resolveDatasetPath(dataset)) {
+    return res.status(404).json({ success: false, message: 'Dataset wurde nicht gefunden.' });
   }
 
   const exists = vocabulary.some(v => v.english.toLowerCase() === english.toLowerCase());
@@ -152,17 +261,16 @@ app.post('/api/add-word', (req, res) => {
   vocabulary.push(newWord);
 
   try {
-    appendCsvWord(newWord);
-    saveVocabularyFile(vocabulary);
-    res.json({ success: true, word: newWord });
+    saveWordToDataset(dataset, newWord);
+    res.json({ success: true, word: newWord, dataset });
   } catch (error) {
+    console.error('Error saving word to dataset:', error);
     res.status(500).json({ success: false, message: 'Fehler beim Speichern des Wortes.' });
   }
 });
 
-// Start server
 const server = app.listen(PORT, '0.0.0.0', () => {
-  loadVocabulary();
+  loadVocabulary(DEFAULT_DATA_FILE);
   console.log(`Server running at http://localhost:${PORT}`);
   console.log(`Server also accessible at http://0.0.0.0:${PORT} (for network access)`);
 });
