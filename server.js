@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const DATA_DIR = path.resolve(__dirname);
 const DEFAULT_DATA_FILE = 'vocabulary.csv';
 
@@ -139,8 +139,23 @@ function getDatasetList() {
 }
 
 function loadVocabulary(dataset = DEFAULT_DATA_FILE) {
-  const validDataset = resolveDatasetPath(dataset) ? dataset : DEFAULT_DATA_FILE;
-  currentDataset = validDataset;
+  const availableDatasets = getDatasetFiles();
+
+  if (availableDatasets.length === 0) {
+    const defaultPath = path.join(DATA_DIR, DEFAULT_DATA_FILE);
+    fs.writeFileSync(defaultPath, 'English,German\n', 'utf8');
+    availableDatasets.push(DEFAULT_DATA_FILE);
+  }
+
+  const requestedDataset = resolveDatasetPath(dataset) ? dataset : null;
+  const fallbackDataset = resolveDatasetPath(DEFAULT_DATA_FILE) ? DEFAULT_DATA_FILE : availableDatasets[0];
+  const selectedDataset = requestedDataset || fallbackDataset;
+
+  if (!selectedDataset) {
+    throw new Error('Kein Dataset gefunden');
+  }
+
+  currentDataset = selectedDataset;
   vocabulary = loadDataset(currentDataset);
   console.log(`Loaded ${vocabulary.length} words from dataset ${currentDataset}`);
 }
