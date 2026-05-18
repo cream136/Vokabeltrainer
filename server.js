@@ -147,7 +147,7 @@ function loadVocabulary(dataset = DEFAULT_DATA_FILE) {
 
 app.get('/api/datasets', (req, res) => {
   const datasets = getDatasetList();
-  res.json({ datasets, defaultDataset: currentDataset || (datasets[0] && datasets[0].name) || DEFAULT_DATA_FILE });
+  res.json({ datasets, defaultDataset: currentDataset || (datasets[0] && datasets[0].name) || '' });
 });
 
 app.post('/api/datasets', (req, res) => {
@@ -214,6 +214,27 @@ app.post('/api/datasets/rename', (req, res) => {
   } catch (error) {
     console.error('Error renaming dataset:', error);
     res.status(500).json({ success: false, message: 'Fehler beim Umbenennen des Datasets.' });
+  }
+});
+
+app.post('/api/datasets/delete', (req, res) => {
+  const name = (req.body.name || '').toString().trim();
+  const filePath = resolveDatasetPath(name);
+
+  if (!filePath) {
+    return res.status(404).json({ success: false, message: 'Dataset nicht gefunden.' });
+  }
+
+  try {
+    fs.unlinkSync(filePath);
+    if (currentDataset === name) {
+      const datasets = getDatasetFiles();
+      currentDataset = datasets[0] || '';
+    }
+    res.json({ success: true, dataset: name });
+  } catch (error) {
+    console.error('Error deleting dataset:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Löschen des Datasets.' });
   }
 });
 

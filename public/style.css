@@ -352,6 +352,11 @@ h1 {
   box-shadow: 0 12px 24px rgba(79, 108, 255, 0.18);
 }
 
+.dataset-rename-row button.danger {
+  background-color: #ff5b5b;
+  box-shadow: 0 12px 24px rgba(255, 91, 91, 0.22);
+}
+
 .stats-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 1fr));

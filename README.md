@@ -33,6 +33,9 @@ Eine einfache Node.js-Anwendung zum Lernen von Vokabeln.
 6. Wähle ein bestehendes Dataset und nutze die Umbenennen-Funktion, um den Dateinamen zu ändern.
    - Der alte Name wird durch den neuen Namen ersetzt.
    - Die Dateiendung bleibt erhalten, wenn du keinen neuen Typ angibst.
+7. Du kannst ein ausgewähltes Dataset löschen, indem du auf `Löschen` klickst.
+   - Nach dem Löschen wird das nächste verfügbare Dataset geladen.
+   - Wenn keine Datensätze mehr vorhanden sind, ist das Quiz leer.
 
 ## Struktur
 

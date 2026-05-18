@@ -45,6 +45,7 @@ async function loadDatasets() {
     });
 
     selectedDataset = data.defaultDataset || data.datasets[0].name;
+    return data;
   } catch (error) {
     console.error('Fehler beim Laden der Datensätze:', error);
   }
@@ -75,7 +76,7 @@ async function createDataset() {
       return;
     }
 
-    await loadDatasets();
+    const datasets = await loadDatasets();
     selectedDataset = data.dataset || name;
     document.getElementById('dataset-select').value = selectedDataset;
     await loadVocabulary(selectedDataset);
@@ -123,7 +124,7 @@ async function renameDataset() {
       return;
     }
 
-    await loadDatasets();
+    const datasets = await loadDatasets();
     selectedDataset = data.dataset;
     document.getElementById('dataset-select').value = selectedDataset;
     await loadVocabulary(selectedDataset);
@@ -135,6 +136,57 @@ async function renameDataset() {
     resultDiv.textContent = 'Fehler beim Umbenennen des Datasets. Bitte versuche es erneut.';
     resultDiv.className = 'incorrect';
     console.error('Rename dataset failed', error);
+  }
+}
+
+async function deleteDataset() {
+  const resultDiv = document.getElementById('result');
+
+  if (!selectedDataset) {
+    resultDiv.textContent = 'Bitte wähle zuerst ein Dataset aus.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  const confirmed = confirm(`Möchtest du das Dataset "${selectedDataset}" wirklich löschen?`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/datasets/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: selectedDataset })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      resultDiv.textContent = data.message || 'Fehler beim Löschen des Datasets.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+
+    const datasets = await loadDatasets();
+    selectedDataset = (datasets && datasets.defaultDataset) || (datasets && datasets.datasets && datasets.datasets[0] && datasets.datasets[0].name) || '';
+    document.getElementById('dataset-select').value = selectedDataset;
+
+    if (selectedDataset) {
+      await loadVocabulary(selectedDataset);
+    } else {
+      vocabulary = [];
+      wordQueue = [];
+      renderUpcomingWords();
+      document.getElementById('english-word').textContent = 'Keine Wörter verfügbar';
+      document.getElementById('check-btn').disabled = true;
+    }
+
+    resultDiv.textContent = `Dataset gelöscht: ${data.dataset}`;
+    resultDiv.className = 'correct';
+  } catch (error) {
+    resultDiv.textContent = 'Fehler beim Löschen des Datasets. Bitte versuche es erneut.';
+    resultDiv.className = 'incorrect';
+    console.error('Delete dataset failed', error);
   }
 }
 
@@ -382,6 +434,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('create-dataset-btn').addEventListener('click', createDataset);
   document.getElementById('rename-dataset-btn').addEventListener('click', renameDataset);
+  document.getElementById('delete-dataset-btn').addEventListener('click', deleteDataset);
 
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
