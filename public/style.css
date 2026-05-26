@@ -367,13 +367,6 @@ h1 {
   box-shadow: 0 12px 24px rgba(255, 91, 91, 0.22);
 }
 
-.stats-panel {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-
 .stat-card {
   background: #f7f9ff;
   border: 1px solid #e1e7ff;
@@ -505,14 +498,6 @@ h1 {
   background: rgba(255, 255, 255, 0.98);
 }
 
-#result {
-  text-align: center;
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0.75rem 0;
-  min-height: 1.5rem;
-}
-
 .add-row input {
   -webkit-appearance: none;
   appearance: none;
@@ -589,6 +574,7 @@ button.secondary:hover {
   min-height: 2rem;
   border-radius: 14px;
   padding: 0.85rem 1rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .hint {
@@ -616,10 +602,6 @@ button.secondary:hover {
   color: #ffffff;
   width: 100%;
   box-shadow: 0 12px 24px rgba(79, 108, 255, 0.18);
-}
-
-#result {
-  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #next-btn:hover {

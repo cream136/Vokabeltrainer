@@ -297,7 +297,23 @@ function renderUpcomingWords() {
   const config = getDirectionConfig();
   list.innerHTML = '';
 
-  const nextWords = incorrectWords.length > 0 ? incorrectWords.slice(0, 3) : wordQueue.slice(0, 3);
+  const seen = new Set();
+  const nextWords = [];
+  const pushUnique = item => {
+    const key = `${item.english}|${item.german}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    nextWords.push(item);
+  };
+  for (const item of incorrectWords) {
+    if (nextWords.length >= 3) break;
+    pushUnique(item);
+  }
+  for (const item of wordQueue) {
+    if (nextWords.length >= 3) break;
+    pushUnique(item);
+  }
+
   if (nextWords.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'upcoming-item';
@@ -431,7 +447,7 @@ async function checkAnswer(autoNext = false) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ question, answer, direction: learningDirection }),
+      body: JSON.stringify({ question, answer, direction: learningDirection, dataset: selectedDataset }),
     });
 
     const data = await response.json();
@@ -441,15 +457,19 @@ async function checkAnswer(autoNext = false) {
       correctCount++;
       resultDiv.textContent = '✅ Richtig!';
       resultDiv.className = 'correct';
-      answeredWords.correct.push(currentWord);
+      if (currentWord && !answeredWords.correct.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
+        answeredWords.correct.push(currentWord);
+      }
     } else {
       incorrectCount++;
       resultDiv.textContent = `❌ Falsch! Richtige Antwort: ${data.correctAnswer}`;
       resultDiv.className = 'incorrect';
-      if (currentWord && !incorrectWords.some(v => v.english === currentWord.english)) {
+      if (currentWord && !incorrectWords.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
         incorrectWords.push(currentWord);
       }
-      answeredWords.incorrect.push(currentWord);
+      if (currentWord && !answeredWords.incorrect.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
+        answeredWords.incorrect.push(currentWord);
+      }
     }
 
     updateStats();

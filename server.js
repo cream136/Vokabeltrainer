@@ -24,15 +24,9 @@ function escapeCsv(value) {
 
 function getDatasetFiles() {
   const files = fs.readdirSync(DATA_DIR);
-  const datasets = files
+  return files
     .filter(file => /\.(csv|xlsx)$/i.test(file))
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-
-  if (!datasets.includes(DEFAULT_DATA_FILE) && fs.existsSync(path.join(DATA_DIR, DEFAULT_DATA_FILE))) {
-    datasets.unshift(DEFAULT_DATA_FILE);
-  }
-
-  return datasets;
 }
 
 function normalizeDatasetName(name, defaultExtension = '.csv') {
@@ -99,6 +93,31 @@ function loadDataset(dataset) {
     .filter(item => item.english && item.german);
 }
 
+const datasetCache = new Map();
+
+function getVocabularyFor(dataset) {
+  const filePath = resolveDatasetPath(dataset);
+  if (!filePath) {
+    throw new Error('Dataset not found');
+  }
+  const stat = fs.statSync(filePath);
+  const cached = datasetCache.get(dataset);
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.words;
+  }
+  const words = loadDataset(dataset);
+  datasetCache.set(dataset, { mtimeMs: stat.mtimeMs, words });
+  return words;
+}
+
+function invalidateDatasetCache(dataset) {
+  if (dataset) {
+    datasetCache.delete(dataset);
+  } else {
+    datasetCache.clear();
+  }
+}
+
 function saveWordToDataset(dataset, word) {
   const filePath = resolveDatasetPath(dataset);
   if (!filePath) {
@@ -156,7 +175,7 @@ function loadVocabulary(dataset = DEFAULT_DATA_FILE) {
   }
 
   currentDataset = selectedDataset;
-  vocabulary = loadDataset(currentDataset);
+  vocabulary = getVocabularyFor(currentDataset);
   console.log(`Loaded ${vocabulary.length} words from dataset ${currentDataset}`);
 }
 
@@ -213,7 +232,7 @@ app.post('/api/datasets/rename', (req, res) => {
   const newPath = path.join(DATA_DIR, newName);
 
   if (oldName === newName) {
-    return res.status(400).json({ success: false, message: 'Der neue Name ist identisch zum bestehenden Namen.' });
+    return res.json({ success: true, dataset: oldName, unchanged: true });
   }
 
   if (fs.existsSync(newPath)) {
@@ -222,6 +241,11 @@ app.post('/api/datasets/rename', (req, res) => {
 
   try {
     fs.renameSync(oldPath, newPath);
+    const cached = datasetCache.get(oldName);
+    invalidateDatasetCache(oldName);
+    if (cached) {
+      datasetCache.set(newName, cached);
+    }
     if (currentDataset === oldName) {
       currentDataset = newName;
     }
@@ -242,9 +266,11 @@ app.post('/api/datasets/delete', (req, res) => {
 
   try {
     fs.unlinkSync(filePath);
+    invalidateDatasetCache(name);
     if (currentDataset === name) {
       const datasets = getDatasetFiles();
       currentDataset = datasets[0] || '';
+      vocabulary = currentDataset ? getVocabularyFor(currentDataset) : [];
     }
     res.json({ success: true, dataset: name });
   } catch (error) {
@@ -265,7 +291,7 @@ app.get('/api/vocabulary', (req, res) => {
 });
 
 app.post('/api/check', (req, res) => {
-  const { question, answer, direction = 'de-en' } = req.body;
+  const { question, answer, direction = 'de-en', dataset } = req.body;
   const normalizedQuestion = (question || '').toString().trim().toLowerCase();
   const normalizedAnswer = (answer || '').toString().trim().toLowerCase();
 
@@ -273,9 +299,17 @@ app.post('/api/check', (req, res) => {
     return res.status(400).json({ correct: false, correctAnswer: 'Unknown word' });
   }
 
+  const targetDataset = dataset || currentDataset;
+  let words;
+  try {
+    words = getVocabularyFor(targetDataset);
+  } catch (error) {
+    return res.status(404).json({ correct: false, correctAnswer: 'Unknown word' });
+  }
+
   const correctWord = direction === 'en-de'
-    ? vocabulary.find(v => v.german.toLowerCase() === normalizedQuestion)
-    : vocabulary.find(v => v.english.toLowerCase() === normalizedQuestion);
+    ? words.find(v => v.german.toLowerCase() === normalizedQuestion)
+    : words.find(v => v.english.toLowerCase() === normalizedQuestion);
 
   if (!correctWord) {
     return res.json({ correct: false, correctAnswer: 'Unknown word' });
@@ -300,16 +334,26 @@ app.post('/api/add-word', (req, res) => {
     return res.status(404).json({ success: false, message: 'Dataset wurde nicht gefunden.' });
   }
 
-  const exists = vocabulary.some(v => v.english.toLowerCase() === english.toLowerCase());
+  let targetWords;
+  try {
+    targetWords = getVocabularyFor(dataset);
+  } catch (error) {
+    return res.status(404).json({ success: false, message: 'Dataset wurde nicht gefunden.' });
+  }
+
+  const exists = targetWords.some(v => v.english.toLowerCase() === english.toLowerCase());
   if (exists) {
     return res.status(409).json({ success: false, message: 'Dieses Wort existiert bereits.' });
   }
 
   const newWord = { english, german };
-  vocabulary.push(newWord);
 
   try {
     saveWordToDataset(dataset, newWord);
+    invalidateDatasetCache(dataset);
+    if (dataset === currentDataset) {
+      vocabulary = getVocabularyFor(currentDataset);
+    }
     res.json({ success: true, word: newWord, dataset });
   } catch (error) {
     console.error('Error saving word to dataset:', error);
