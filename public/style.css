@@ -311,6 +311,7 @@ h1 {
 }
 
 .dataset-row,
+.direction-row,
 .dataset-create-row,
 .dataset-rename-row {
   display: flex;
@@ -322,6 +323,7 @@ h1 {
 }
 
 .dataset-row label,
+.direction-row label,
 .dataset-create-row label,
 .dataset-rename-row label {
   font-weight: 700;
@@ -329,6 +331,7 @@ h1 {
 }
 
 .dataset-row select,
+.direction-row select,
 .dataset-create-row input,
 .dataset-rename-row input {
   min-width: 240px;

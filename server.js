@@ -265,14 +265,26 @@ app.get('/api/vocabulary', (req, res) => {
 });
 
 app.post('/api/check', (req, res) => {
-  const { english, german } = req.body;
-  const correct = vocabulary.find(v => v.english.toLowerCase() === english.toLowerCase());
-  if (correct) {
-    const isCorrect = correct.german.toLowerCase() === german.toLowerCase().trim();
-    res.json({ correct: isCorrect, correctAnswer: correct.german });
-  } else {
-    res.json({ correct: false, correctAnswer: 'Unknown word' });
+  const { question, answer, direction = 'de-en' } = req.body;
+  const normalizedQuestion = (question || '').toString().trim().toLowerCase();
+  const normalizedAnswer = (answer || '').toString().trim().toLowerCase();
+
+  if (!normalizedQuestion || !normalizedAnswer) {
+    return res.status(400).json({ correct: false, correctAnswer: 'Unknown word' });
   }
+
+  const correctWord = direction === 'en-de'
+    ? vocabulary.find(v => v.german.toLowerCase() === normalizedQuestion)
+    : vocabulary.find(v => v.english.toLowerCase() === normalizedQuestion);
+
+  if (!correctWord) {
+    return res.json({ correct: false, correctAnswer: 'Unknown word' });
+  }
+
+  const expectedAnswer = direction === 'en-de' ? correctWord.english : correctWord.german;
+  const isCorrect = expectedAnswer.toLowerCase() === normalizedAnswer;
+
+  res.json({ correct: isCorrect, correctAnswer: expectedAnswer });
 });
 
 app.post('/api/add-word', (req, res) => {

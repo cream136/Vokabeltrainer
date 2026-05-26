@@ -7,6 +7,30 @@ let incorrectCount = 0;
 let totalCount = 0;
 let answeredWords = { correct: [], incorrect: [] };
 let selectedDataset = '';
+let learningDirection = 'de-en';
+
+const directionConfig = {
+  'de-en': {
+    questionKey: 'english',
+    answerKey: 'german',
+    answerPlaceholder: 'Deutsche Übersetzung'
+  },
+  'en-de': {
+    questionKey: 'german',
+    answerKey: 'english',
+    answerPlaceholder: 'Englische Übersetzung'
+  }
+};
+
+function getDirectionConfig() {
+  return directionConfig[learningDirection] || directionConfig['de-en'];
+}
+
+function updateAnswerInput() {
+  const answerInput = document.getElementById('german-input');
+  const config = getDirectionConfig();
+  answerInput.placeholder = config.answerPlaceholder;
+}
 
 function shuffle(array) {
   const result = array.slice();
@@ -255,6 +279,7 @@ function updateWordLists() {
 
 function renderUpcomingWords() {
   const list = document.getElementById('upcoming-list');
+  const config = getDirectionConfig();
   list.innerHTML = '';
 
   const nextWords = incorrectWords.length > 0 ? incorrectWords.slice(0, 3) : wordQueue.slice(0, 3);
@@ -269,7 +294,7 @@ function renderUpcomingWords() {
   nextWords.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'upcoming-item';
-    row.textContent = `${index + 1}. ${item.english}`;
+    row.textContent = `${index + 1}. ${item[config.questionKey]}`;
     list.appendChild(row);
   });
 }
@@ -351,6 +376,7 @@ function getNextWordFromQueue() {
 
 function showNextWord() {
   const resultDiv = document.getElementById('result');
+  const config = getDirectionConfig();
   resultDiv.textContent = 'Gib die Übersetzung ein und klicke auf Prüfen.';
   resultDiv.className = 'hint';
 
@@ -358,13 +384,15 @@ function showNextWord() {
   if (!currentWord) {
     document.getElementById('english-word').textContent = 'Keine Wörter verfügbar';
     document.getElementById('german-input').value = '';
+    updateAnswerInput();
     document.getElementById('check-btn').disabled = true;
     renderUpcomingWords();
     return;
   }
 
-  document.getElementById('english-word').textContent = currentWord.english;
+  document.getElementById('english-word').textContent = currentWord[config.questionKey];
   document.getElementById('german-input').value = '';
+  updateAnswerInput();
   document.getElementById('german-input').focus();
   document.getElementById('check-btn').disabled = false;
   document.getElementById('next-btn').classList.add('hidden');
@@ -372,11 +400,11 @@ function showNextWord() {
 }
 
 async function checkAnswer(autoNext = false) {
-  const english = document.getElementById('english-word').textContent;
-  const german = document.getElementById('german-input').value.trim();
+  const question = document.getElementById('english-word').textContent;
+  const answer = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
 
-  if (!german) {
+  if (!answer) {
     resultDiv.textContent = 'Bitte gib eine Antwort ein.';
     resultDiv.className = 'hint';
     return;
@@ -388,7 +416,7 @@ async function checkAnswer(autoNext = false) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ english, german }),
+      body: JSON.stringify({ question, answer, direction: learningDirection }),
     });
 
     const data = await response.json();
@@ -425,10 +453,17 @@ async function checkAnswer(autoNext = false) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadDatasets();
+  updateAnswerInput();
   await loadVocabulary();
 
   document.getElementById('dataset-select').addEventListener('change', async (event) => {
     selectedDataset = event.target.value;
+    resetQuiz(selectedDataset);
+  });
+
+  document.getElementById('direction-select').addEventListener('change', (event) => {
+    learningDirection = event.target.value;
+    updateAnswerInput();
     resetQuiz(selectedDataset);
   });
 
