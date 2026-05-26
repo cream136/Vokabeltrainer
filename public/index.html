@@ -53,10 +53,17 @@
 
       <section class="panel quiz-panel">
         <h2>Übersetzung</h2>
+        <div id="direction-banner" class="direction-banner">Deutsch → Englisch</div>
         <div id="word-container">
           <div class="word-pair">
-            <span id="english-word">Lädt...</span>
-            <input type="text" id="german-input" placeholder="Deutsche Übersetzung" autocomplete="off">
+            <div class="input-group">
+              <label for="english-word" class="field-label" id="question-label">Deutsch</label>
+              <span id="english-word" class="question-word">Lädt...</span>
+            </div>
+            <div class="input-group">
+              <label for="german-input" class="field-label" id="answer-label">Englisch</label>
+              <input type="text" id="german-input" placeholder="Deutsche Übersetzung" autocomplete="off">
+            </div>
             <button id="check-btn">Prüfen</button>
           </div>
           <div id="result"></div>

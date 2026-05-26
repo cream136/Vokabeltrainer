@@ -419,6 +419,20 @@ h1 {
   grid-column: span 2;
 }
 
+.direction-banner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f6cff, #7a99ff);
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 12px 24px rgba(79, 108, 255, 0.2);
+}
+
 .word-pair {
   display: grid;
   grid-template-columns: 1fr;
@@ -432,6 +446,19 @@ h1 {
   background: #f8faff;
 }
 
+.input-group {
+  width: 100%;
+  text-align: center;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+  color: #1f3a6d;
+  text-align: center;
+}
+
 #english-word {
   font-size: 1.35rem;
   font-weight: 700;
@@ -442,7 +469,7 @@ h1 {
   padding: 0.85rem 1rem;
   background: white;
   border: 1px solid #d1d8ff;
-  border-radius: 14px 14px 0 0;
+  border-radius: 14px;
   box-shadow: 0 2px 8px rgba(44, 79, 148, 0.08);
   box-sizing: border-box;
   min-height: 48px;

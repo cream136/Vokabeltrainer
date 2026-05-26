@@ -30,6 +30,21 @@ function updateAnswerInput() {
   const answerInput = document.getElementById('german-input');
   const config = getDirectionConfig();
   answerInput.placeholder = config.answerPlaceholder;
+  updateQuizLabels();
+}
+
+function updateQuizLabels() {
+  const config = getDirectionConfig();
+  const directionBanner = document.getElementById('direction-banner');
+  const questionLabel = document.getElementById('question-label');
+  const answerLabel = document.getElementById('answer-label');
+
+  directionBanner.textContent = config.questionKey === 'english'
+    ? 'Deutsch → Englisch'
+    : 'Englisch → Deutsch';
+
+  questionLabel.textContent = config.questionKey === 'english' ? 'Deutsch' : 'Englisch';
+  answerLabel.textContent = config.questionKey === 'english' ? 'Englisch' : 'Deutsch';
 }
 
 function shuffle(array) {
