@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -358,6 +359,100 @@ app.post('/api/add-word', (req, res) => {
   } catch (error) {
     console.error('Error saving word to dataset:', error);
     res.status(500).json({ success: false, message: 'Fehler beim Speichern des Wortes.' });
+  }
+});
+
+// ── AI Helper ────────────────────────────────────────────────────────────────
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'ollama').toLowerCase();
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1';
+
+function buildAiPrompt(word) {
+  return `Du bist ein erfahrener Englisch-Deutsch-Lehrer.
+Zum englischen Wort "${word}" gib mir bitte die folgenden Informationen:
+
+1. **Wortart** (Nomen / Verb / Adjektiv / Adverb / Präposition / ...)
+2. **Konjugation** – NUR wenn es ein Verb ist:
+   - Infinitiv: ...
+   - Simple Past: ...
+   - Past Participle: ...
+   - Regelmäßig oder unregelmäßig?
+3. **2–3 Beispielsätze** (Englisch mit deutscher Übersetzung)
+4. **Synonyme / verwandte Wörter** (falls vorhanden)
+5. **Aussprache-Hinweis** (falls relevant)
+
+Sei präzise, antworte ausschließlich auf Deutsch und nutze Markdown-Formatierung.`;
+}
+
+async function callOllama(word) {
+  const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      messages: [
+        { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
+        { role: 'user', content: buildAiPrompt(word) }
+      ],
+      stream: false
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Ollama-Fehler: ${response.status} ${await response.text()}`);
+  }
+  const data = await response.json();
+  return data.message?.content || data.response || '';
+}
+
+async function callOpenAI(word) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY ist nicht gesetzt. Bitte trage es in der .env-Datei ein.');
+  }
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
+        { role: 'user', content: buildAiPrompt(word) }
+      ],
+      max_tokens: 1000,
+      temperature: 0.3
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`OpenAI-Fehler: ${response.status} ${await response.text()}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+app.post('/api/ai-helper', async (req, res) => {
+  const word = (req.body.word || '').toString().trim();
+  if (!word) {
+    return res.status(400).json({ success: false, message: 'Bitte gib ein Wort ein.' });
+  }
+
+  try {
+    let info;
+    if (AI_PROVIDER === 'openai') {
+      info = await callOpenAI(word);
+    } else {
+      info = await callOllama(word);
+    }
+    res.json({ success: true, info, provider: AI_PROVIDER });
+  } catch (error) {
+    console.error('AI Helper Error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: `KI-Dienst nicht erreichbar (${AI_PROVIDER}): ${error.message}`
+    });
   }
 });
 

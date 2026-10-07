@@ -390,6 +390,7 @@ function resetQuiz(dataset = selectedDataset) {
   document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
   document.getElementById('result').className = 'hint';
   document.getElementById('next-btn').classList.add('hidden');
+  resetAiPanel();
   loadVocabulary(selectedDataset);
 }
 
@@ -428,6 +429,7 @@ function showNextWord() {
   document.getElementById('check-btn').disabled = false;
   document.getElementById('next-btn').classList.add('hidden');
   renderUpcomingWords();
+  resetAiPanel();
 }
 
 async function checkAnswer(autoNext = false) {
@@ -486,6 +488,65 @@ async function checkAnswer(autoNext = false) {
   }
 }
 
+// ── KI-Hilfe ──────────────────────────────────────────────────────────────────
+async function fetchAiHelper() {
+  const word = document.getElementById('english-word').textContent.trim();
+  const btnLabel = document.getElementById('ai-btn-label');
+  const spinner = document.getElementById('ai-spinner');
+  const resultDiv = document.getElementById('ai-result');
+  const aiBtn = document.getElementById('ai-btn');
+
+  if (!word || word === 'Lädt...' || word === 'Keine Wörter verfügbar') {
+    resultDiv.textContent = 'Bitte warte, bis ein Wort geladen ist.';
+    resultDiv.classList.remove('hidden');
+    resultDiv.classList.add('ai-error');
+    return;
+  }
+
+  aiBtn.disabled = true;
+  btnLabel.classList.add('hidden');
+  spinner.classList.remove('hidden');
+  resultDiv.classList.add('hidden');
+  resultDiv.classList.remove('ai-error');
+
+  try {
+    const response = await fetch('/api/ai-helper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ word })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      resultDiv.textContent = data.info;
+      resultDiv.classList.remove('hidden');
+    } else {
+      resultDiv.textContent = data.message || 'Fehler bei der KI-Anfrage.';
+      resultDiv.classList.remove('hidden');
+      resultDiv.classList.add('ai-error');
+    }
+  } catch (error) {
+    console.error('AI Helper Fehler:', error);
+    resultDiv.textContent = 'Fehler: KI-Dienst nicht erreichbar.\nBitte starte Ollama (ollama serve) oder konfiguriere OPENAI_API_KEY.';
+    resultDiv.classList.remove('hidden');
+    resultDiv.classList.add('ai-error');
+  } finally {
+    aiBtn.disabled = false;
+    btnLabel.classList.remove('hidden');
+    spinner.classList.add('hidden');
+  }
+}
+
+function resetAiPanel() {
+  const resultDiv = document.getElementById('ai-result');
+  if (resultDiv) {
+    resultDiv.textContent = '';
+    resultDiv.classList.add('hidden');
+    resultDiv.classList.remove('ai-error');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await loadDatasets();
   updateAnswerInput();
@@ -505,6 +566,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('create-dataset-btn').addEventListener('click', createDataset);
   document.getElementById('rename-dataset-btn').addEventListener('click', renameDataset);
   document.getElementById('delete-dataset-btn').addEventListener('click', deleteDataset);
+  document.getElementById('ai-btn').addEventListener('click', fetchAiHelper);
 
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);

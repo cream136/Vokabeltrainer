@@ -1,13 +1,50 @@
 {
   "name": "vokabeltrainer",
-  "version": "1.0.0",
-  "description": "A Node.js vocabulary trainer app",
-  "main": "server.js",
+  "version": "2.0.0",
+  "description": "Vokabeltrainer – Lerne Vokabeln mit KI-Hilfe (Electron App)",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "electron": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "de.vokabeltrainer.app",
+    "productName": "Vokabeltrainer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "public/**/*",
+      "*.csv",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
