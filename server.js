@@ -7,7 +7,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.resolve(__dirname);
-const DEFAULT_DATA_FILE = 'vocabulary.csv';
+const DEFAULT_DATA_FILE = 'IT.csv';
+const SESSION_STATE_FILE = 'session-state.json';
 
 let vocabulary = [];
 let currentDataset = DEFAULT_DATA_FILE;
@@ -70,7 +71,7 @@ function loadDataset(dataset) {
     throw new Error('Dataset not found');
   }
 
-  const workbook = XLSX.readFile(filePath, { cellDates: true, raw: false });
+  const workbook = XLSX.readFile(filePath, { codepage: 65001 });
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { defval: '' }) : [];
@@ -136,7 +137,7 @@ function saveWordToDataset(dataset, word) {
     return;
   }
 
-  const workbook = fs.existsSync(filePath) ? XLSX.readFile(filePath, { cellDates: true, raw: false }) : XLSX.utils.book_new();
+  const workbook = fs.existsSync(filePath) ? XLSX.readFile(filePath, { cellDates: true, raw: false, codepage: 65001 }) : XLSX.utils.book_new();
   const sheetName = workbook.SheetNames[0] || 'Sheet1';
   const worksheet = workbook.Sheets[sheetName];
   const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { defval: '' }) : [];
@@ -362,12 +363,79 @@ app.post('/api/add-word', (req, res) => {
   }
 });
 
+// ── Session-State: Speichern & Beenden ──────────────────────────────────────
+function buildStateRecord(state) {
+  const answeredWords = state && state.answeredWords ? state.answeredWords : {};
+  return {
+    savedAt: new Date().toISOString(),
+    dataset: state && state.dataset ? state.dataset : currentDataset,
+    direction: state && state.direction === 'en-de' ? 'en-de' : 'de-en',
+    correctCount: Number(state && state.correctCount) || 0,
+    incorrectCount: Number(state && state.incorrectCount) || 0,
+    totalCount: Number(state && state.totalCount) || 0,
+    answeredWords: {
+      correct: answeredWords && Array.isArray(answeredWords.correct) ? answeredWords.correct : [],
+      incorrect: answeredWords && Array.isArray(answeredWords.incorrect) ? answeredWords.incorrect : []
+    },
+    incorrectWords: state && Array.isArray(state.incorrectWords) ? state.incorrectWords : [],
+    wordQueue: state && Array.isArray(state.wordQueue) ? state.wordQueue : []
+  };
+}
+
+app.post('/api/finish', (req, res) => {
+  const record = buildStateRecord(req.body);
+  const statePath = path.join(DATA_DIR, SESSION_STATE_FILE);
+
+  try {
+    fs.writeFileSync(statePath, JSON.stringify(record, null, 2), 'utf8');
+    console.log(`Lernstand gespeichert: ${record.dataset} (${record.totalCount} Versuche)`);
+  } catch (error) {
+    console.error('Fehler beim Speichern des Lernstands:', error);
+    return res.status(500).json({ success: false, message: 'Fehler beim Speichern des Lernstands.' });
+  }
+
+  res.json({ success: true, message: 'Lernstand gespeichert. Die Anwendung wird beendet.' });
+
+  // Server sauber schließen: laufende Anfragen abwarten, dann enden.
+  const forceExit = setTimeout(() => {
+    console.log('Timeout überschritten – Server wird erzwungen beendet.');
+    process.exit(0);
+  }, 2000);
+
+  server.close(() => {
+    clearTimeout(forceExit);
+    console.log('✅ Alle Verbindungen geschlossen – Server sauber beendet.');
+    process.exit(0);
+  });
+});
+
+app.get('/api/state', (req, res) => {
+  const statePath = path.join(DATA_DIR, SESSION_STATE_FILE);
+  try {
+    if (!fs.existsSync(statePath)) {
+      return res.json({ hasState: false });
+    }
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    if (!state || typeof state !== 'object' || !state.dataset) {
+      return res.json({ hasState: false });
+    }
+    res.json({ hasState: true, state });
+  } catch (error) {
+    console.error('Fehler beim Laden des Lernstands:', error);
+    res.json({ hasState: false });
+  }
+});
+
 // ── AI Helper ────────────────────────────────────────────────────────────────
-const AI_PROVIDER = (process.env.AI_PROVIDER || 'ollama').toLowerCase();
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 function buildAiPrompt(word) {
   return `Du bist ein erfahrener Englisch-Deutsch-Lehrer.
@@ -433,27 +501,92 @@ async function callOpenAI(word) {
   return data.choices?.[0]?.message?.content || '';
 }
 
+async function callGroq(word) {
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen (kostenlos: https://console.groq.com/keys).');
+  }
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
+        { role: 'user', content: buildAiPrompt(word) }
+      ],
+      max_tokens: 1000,
+      temperature: 0.3
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Groq-Fehler: ${response.status} ${await response.text()}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callGemini(word) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen (kostenlos: https://aistudio.google.com/app/apikey).');
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: buildAiPrompt(word) }] }],
+      systemInstruction: { parts: [{ text: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' }] }
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Gemini-Fehler: ${response.status} ${await response.text()}`);
+  }
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+}
+
 app.post('/api/ai-helper', async (req, res) => {
   const word = (req.body.word || '').toString().trim();
   if (!word) {
     return res.status(400).json({ success: false, message: 'Bitte gib ein Wort ein.' });
   }
 
-  try {
-    let info;
-    if (AI_PROVIDER === 'openai') {
-      info = await callOpenAI(word);
-    } else {
-      info = await callOllama(word);
+  // Fallback-Kette: Primär-Provider zuerst, danach die alternativen Provider.
+  const chain = [AI_PROVIDER, ...['openai', 'groq', 'gemini', 'ollama'].filter(p => p !== AI_PROVIDER)];
+
+  const callMap = {
+    openai: callOpenAI,
+    groq: callGroq,
+    gemini: callGemini,
+    ollama: callOllama
+  };
+
+  const errors = [];
+  for (const provider of chain) {
+    const call = callMap[provider];
+    if (!call) {
+      continue;
     }
-    res.json({ success: true, info, provider: AI_PROVIDER });
-  } catch (error) {
-    console.error('AI Helper Error:', error.message);
-    res.status(500).json({
-      success: false,
-      message: `KI-Dienst nicht erreichbar (${AI_PROVIDER}): ${error.message}`
-    });
+    try {
+      const info = await call(word);
+      if (info) {
+        console.log(`KI-Hilfe über Provider: ${provider}`);
+        return res.json({ success: true, info, provider });
+      }
+      errors.push(`${provider}: leere Antwort`);
+    } catch (error) {
+      console.error(`KI-Hilfe ${provider} fehlgeschlagen:`, error.message);
+      errors.push(`${provider}: ${error.message}`);
+    }
   }
+
+  res.status(502).json({
+    success: false,
+    message: `Alle KI-Provider fehlgeschlagen:\n${errors.join('\n')}`
+  });
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {

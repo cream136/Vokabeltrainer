@@ -573,6 +573,17 @@ button.secondary:hover {
   background: #f3f5ff;
 }
 
+button.danger {
+  background: linear-gradient(135deg, #ff5b5b, #ff8484);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 12px 24px rgba(255, 91, 91, 0.22);
+}
+
+button.danger:hover {
+  background: linear-gradient(135deg, #f04747, #ff6e6e);
+}
+
 #result {
   margin: 1rem 0;
   font-size: 1.1rem;

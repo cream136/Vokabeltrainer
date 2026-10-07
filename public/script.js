@@ -1,6 +1,5 @@
 let vocabulary = [];
 let wordQueue = [];
-let incorrectWords = [];
 let currentWord = null;
 let correctCount = 0;
 let incorrectCount = 0;
@@ -8,6 +7,7 @@ let totalCount = 0;
 let answeredWords = { correct: [], incorrect: [] };
 let selectedDataset = '';
 let learningDirection = 'de-en';
+let quizFinished = false;
 
 const directionConfig = {
   'de-en': {
@@ -305,10 +305,6 @@ function renderUpcomingWords() {
     seen.add(key);
     nextWords.push(item);
   };
-  for (const item of incorrectWords) {
-    if (nextWords.length >= 3) break;
-    pushUnique(item);
-  }
   for (const item of wordQueue) {
     if (nextWords.length >= 3) break;
     pushUnique(item);
@@ -379,7 +375,7 @@ function resetQuiz(dataset = selectedDataset) {
     selectedDataset = dataset;
   }
 
-  incorrectWords = [];
+  quizFinished = false;
   wordQueue = [];
   currentWord = null;
   correctCount = 0;
@@ -387,6 +383,7 @@ function resetQuiz(dataset = selectedDataset) {
   totalCount = 0;
   answeredWords = { correct: [], incorrect: [] };
   updateStats();
+  document.getElementById('german-input').disabled = false;
   document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
   document.getElementById('result').className = 'hint';
   document.getElementById('next-btn').classList.add('hidden');
@@ -394,11 +391,140 @@ function resetQuiz(dataset = selectedDataset) {
   loadVocabulary(selectedDataset);
 }
 
-function getNextWordFromQueue() {
-  if (incorrectWords.length > 0) {
-    return incorrectWords.shift();
+async function finishQuiz() {
+  if (!confirm('Möchtest du die Anwendung wirklich beenden? Dein Lernstand wird gespeichert und beim nächsten Start wieder geladen.')) {
+    return;
   }
 
+  const resultDiv = document.getElementById('result');
+  resultDiv.textContent = 'Speichere Lernstand und beende die Anwendung...';
+  resultDiv.className = 'hint';
+  document.getElementById('finish-btn').disabled = true;
+
+  const state = {
+    dataset: selectedDataset,
+    direction: learningDirection,
+    correctCount,
+    incorrectCount,
+    totalCount,
+    answeredWords,
+    wordQueue
+  };
+
+  let saved = false;
+  let serverMessage = '';
+  try {
+    const response = await fetch('/api/finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state)
+    });
+    const text = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null; // z.B. 404-HTML-Seite statt JSON
+    }
+    saved = response.ok && !!data && data.success === true;
+    if (response.status === 404) {
+      serverMessage = 'Der Server kennt die Enden-Funktion nicht. Bitte Anwendung neu starten (npm start bzw. node server.js), damit die neue Server-Version läuft.';
+    } else if (data && data.message) {
+      serverMessage = data.message;
+    }
+    if (!saved && !serverMessage) {
+      serverMessage = `Server-Antwort: HTTP ${response.status}`;
+    }
+  } catch (error) {
+    console.error('Fehler beim Beenden der Anwendung:', error);
+    serverMessage = 'Der Server ist nicht erreichbar. Läuft die Anwendung (npm start bzw. node server.js)?';
+  }
+
+  if (!saved) {
+    resultDiv.textContent = `Fehler: Der Lernstand konnte nicht gespeichert werden. ${serverMessage}`;
+    resultDiv.className = 'incorrect';
+    document.getElementById('finish-btn').disabled = false;
+    return;
+  }
+
+  const accuracy = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+
+  // Fenster schließen (wirkt nur, wenn die Seite per Skript geöffnet wurde).
+  window.close();
+  // Fallback: saubere „Beendet"-Anzeige, damit klar ist, dass die App sich geschlossen hat.
+  showShutdownScreen(accuracy);
+}
+
+function showShutdownScreen(accuracy) {
+  const container = document.querySelector('.container');
+  if (!container) {
+    return;
+  }
+
+  let summary = '';
+  if (totalCount > 0) {
+    summary = `<p>📊 Letzter Stand: ${correctCount} richtig, ${incorrectCount} falsch von ${totalCount} Versuchen (${accuracy} %).</p>`;
+  }
+
+  container.innerHTML = `
+    <h1>🏁 Vokabeltrainer wurde beendet</h1>
+    <p>Dein Lernstand wurde gespeichert und wird beim nächsten Start automatisch geladen.</p>
+    ${summary}
+    <p class="hint" style="margin-top:1.5rem;">Du kannst dieses Fenster jetzt schließen.</p>`;
+}
+
+async function restoreLastState() {
+  try {
+    const response = await fetch('/api/state');
+    const data = await response.json();
+    if (!data || !data.hasState || !data.state) {
+      return;
+    }
+
+    const saved = data.state;
+    const select = document.getElementById('dataset-select');
+    const datasetExists = Array.from(select.options).some(option => option.value === saved.dataset);
+    if (!datasetExists) {
+      return;
+    }
+
+    selectedDataset = saved.dataset;
+    select.value = saved.dataset;
+    learningDirection = (saved.direction === 'en-de' || saved.direction === 'de-en') ? saved.direction : 'de-en';
+    document.getElementById('direction-select').value = learningDirection;
+    updateAnswerInput();
+
+    correctCount = Number(saved.correctCount) || 0;
+    incorrectCount = Number(saved.incorrectCount) || 0;
+    totalCount = Number(saved.totalCount) || 0;
+    answeredWords = {
+      correct: saved.answeredWords && Array.isArray(saved.answeredWords.correct) ? saved.answeredWords.correct : [],
+      incorrect: saved.answeredWords && Array.isArray(saved.answeredWords.incorrect) ? saved.answeredWords.incorrect : []
+    };
+    if (Array.isArray(saved.wordQueue) && saved.wordQueue.length > 0) {
+      wordQueue = saved.wordQueue;
+    }
+    // Altes Standformat: fehlbeantwortete Wörter an das Ende der Queue anhängen.
+    if (Array.isArray(saved.incorrectWords)) {
+      for (const item of saved.incorrectWords) {
+        if (item && !wordQueue.some(v => v.english === item.english && v.german === item.german)) {
+          wordQueue.push(item);
+        }
+      }
+    }
+    currentWord = null;
+
+    updateStats();
+    const resultDiv = document.getElementById('result');
+    resultDiv.textContent = '🔄 Letzter Lernstand wiederhergestellt – die Runde kann fortgesetzt werden.';
+    resultDiv.className = 'hint';
+    showNextWord();
+  } catch (error) {
+    console.error('Fehler beim Wiederherstellen des letzten Standes:', error);
+  }
+}
+
+function getNextWordFromQueue() {
   if (wordQueue.length === 0) {
     rebuildQueue();
   }
@@ -437,6 +563,12 @@ async function checkAnswer(autoNext = false) {
   const answer = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
 
+  if (quizFinished) {
+    resultDiv.textContent = 'Das Quiz wurde beendet. Klicke auf „Neu starten", um zu lernen.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
   if (!answer) {
     resultDiv.textContent = 'Bitte gib eine Antwort ein.';
     resultDiv.className = 'hint';
@@ -466,8 +598,9 @@ async function checkAnswer(autoNext = false) {
       incorrectCount++;
       resultDiv.textContent = `❌ Falsch! Richtige Antwort: ${data.correctAnswer}`;
       resultDiv.className = 'incorrect';
-      if (currentWord && !incorrectWords.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
-        incorrectWords.push(currentWord);
+      // Wort kommt am Ende der Runde noch einmal dran, blockiert aber nicht die nächsten Wörter.
+      if (currentWord && !wordQueue.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
+        wordQueue.push(currentWord);
       }
       if (currentWord && !answeredWords.incorrect.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
         answeredWords.incorrect.push(currentWord);
@@ -528,7 +661,7 @@ async function fetchAiHelper() {
     }
   } catch (error) {
     console.error('AI Helper Fehler:', error);
-    resultDiv.textContent = 'Fehler: KI-Dienst nicht erreichbar.\nBitte starte Ollama (ollama serve) oder konfiguriere OPENAI_API_KEY.';
+    resultDiv.textContent = 'Fehler: Alle KI-Provider fehlgeschlagen. Bitte API-Keys in der .env-Datei prüfen (OPENAI_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY).';
     resultDiv.classList.remove('hidden');
     resultDiv.classList.add('ai-error');
   } finally {
@@ -551,6 +684,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadDatasets();
   updateAnswerInput();
   await loadVocabulary();
+  await restoreLastState();
 
   document.getElementById('dataset-select').addEventListener('change', async (event) => {
     selectedDataset = event.target.value;
@@ -571,6 +705,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
   document.getElementById('restart-btn').addEventListener('click', () => resetQuiz(selectedDataset));
+  document.getElementById('next-question-btn').addEventListener('click', showNextWord);
+  document.getElementById('finish-btn').addEventListener('click', finishQuiz);
   document.getElementById('add-word-btn').addEventListener('click', addNewWord);
 
   document.getElementById('german-input').addEventListener('keypress', (e) => {

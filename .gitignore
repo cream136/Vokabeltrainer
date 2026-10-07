@@ -12,6 +12,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Lernstand (wird bei "Beenden" gespeichert)
+session-state.json
+
 # Betriebssystem / Editor
 .DS_Store
 Thumbs.db
