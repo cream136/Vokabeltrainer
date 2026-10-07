@@ -1,6 +1,11 @@
 # Node / Electron
 node_modules/
 
+# Secrets / API Keys
+.env
+.env.*
+!.env.example
+
 # Build-Ausgaben
 dist/
 out/
@@ -12,7 +17,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Lernstand (wird bei "Beenden" gespeichert)
+# Lernstand
 session-state.json
 
 # Betriebssystem / Editor
