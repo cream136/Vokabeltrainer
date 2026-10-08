@@ -395,8 +395,8 @@ app.post('/api/verb-check', (req, res) => {
   if (!verbRaw || !answer) {
     return res.status(400).json({ success: false, message: 'Verb und Antwort sind erforderlich.' });
   }
-  if (!['past', 'participle', 'meaning'].includes(target)) {
-    return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: past, participle, meaning.' });
+  if (!['past', 'participle', 'meaning', 'infinitive'].includes(target)) {
+    return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: past, participle, meaning, infinitive.' });
   }
 
   const entry = findVerbEntry(verbRaw);
@@ -404,7 +404,7 @@ app.post('/api/verb-check', (req, res) => {
     return res.status(404).json({ success: false, message: 'Dieses Verb ist nicht in der Liste der unregelmäßigen Verben enthalten.' });
   }
 
-  const expectedRaw = target === 'past' ? entry.past : target === 'participle' ? entry.participle : entry.german;
+  const expectedRaw = target === 'past' ? entry.past : target === 'participle' ? entry.participle : target === 'infinitive' ? entry.infinitive : entry.german;
   const accepted = splitVerbVariants(expectedRaw).map(v => v.toLowerCase());
   const correct = target === 'meaning'
     ? (accepted.includes(answer.toLowerCase()) || meaningMatches(expectedRaw, answer))
@@ -569,7 +569,7 @@ Merkregeln:
 - FALSE FRIEND: become bedeutet "werden", nicht "bekommen"!`;
 
 function buildVerbTensePrompt(entry, target, userAnswer) {
-  const targetLabels = { past: 'Simple Past (1. Form)', participle: 'Past Participle (2. Form)', meaning: 'deutsche Bedeutung' };
+  const targetLabels = { past: 'Simple Past (1. Form)', participle: 'Past Participle (2. Form)', meaning: 'deutsche Bedeutung', infinitive: 'Infinitiv (Grundform)' };
   const targetLabel = targetLabels[target] || 'richtigen Form';
   const given = (userAnswer || '').toString().trim();
   const givenText = given
@@ -583,7 +583,7 @@ Richtige Formen laut Lehrbuchliste:
 - Infinitiv (Grundform): ${entry.infinitive}
 - Simple Past (1. Form): ${entry.past}
 - Past Participle (2. Form): ${entry.participle}
-Es wurde nach der Form "Simple Past / Past Participle / Bedeutung" gefragt – konkret: ${targetLabel}.
+Es wurde nach der Form "Simple Past / Past Participle / Infinitiv (Grundform) / Bedeutung" gefragt – konkret: ${targetLabel}.
 ${givenText}
 
 Nutze dieses Lernsystem (Quelle: englisch-hilfen.de), um eine passende Eselsbrücke zu bauen:

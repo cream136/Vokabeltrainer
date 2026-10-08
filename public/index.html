@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Vokabeltrainer">
-  <!-- <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"> -->
-  <!-- <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png"> -->
-  <!-- <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png"> -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png">
   <title>Vokabeltrainer</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -93,16 +93,22 @@
         <div class="topbar-field hidden" id="target-field">
           <label for="verb-target-select">Frageart</label>
           <select id="verb-target-select">
-            <option value="all" selected>Alle 3 (Form 1 → Form 2 → Bedeutung)</option>
+            <option value="all" selected>Alle 3 Formen + Bedeutung</option>
             <option value="past">Simple Past (1. Form)</option>
             <option value="participle">Past Participle (2. Form)</option>
+            <option value="infinitive">Infinitiv (Grundform)</option>
             <option value="meaning">Bedeutung (Deutsch)</option>
           </select>
         </div>
       </div>
 
       <section class="quiz-card">
-        <div id="direction-banner" class="direction-banner">Deutsch → Englisch</div>
+        <div class="quiz-header">
+          <div id="direction-banner" class="direction-banner">Deutsch → Englisch</div>
+          <div id="upcoming-list" class="upcoming-list" title="Bevorstehende Fragen">
+            <div class="upcoming-item">Lädt...</div>
+          </div>
+        </div>
         <div id="word-container">
           <div class="word-pair">
             <div class="input-group">
@@ -142,14 +148,17 @@
         </div>
       </div>
 
-      <section class="preview-panel">
-        <h2>Vorschau</h2>
-        <div id="upcoming-list" class="upcoming-list">
-          <div class="upcoming-item">Lädt...</div>
-        </div>
-      </section>
+      <script src="script.js"></script>
+      <script>
+        // PWA: Service Worker registrieren (iOS Safari erlaubt SW nur mit HTTPS/localhost – Fehler sind harmlos)
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js')
+              .catch(function (err) { console.warn('Service Worker nicht registriert:', err); });
+          });
+        }
+      </script>
     </main>
   </div>
-  <script src="script.js"></script>
 </body>
 </html>

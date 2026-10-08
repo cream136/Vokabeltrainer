@@ -27,12 +27,13 @@ let learnMode = 'words'; // 'words' | 'tenses'
 let verbs = [];
 let verbQueue = [];
 let currentVerb = null;
-let verbTarget = 'all'; // 'all' | 'past' | 'participle' | 'meaning' ('all' = pro Verb alle drei Fragearten)
+let verbTarget = 'all'; // 'all' | 'past' | 'participle' | 'infinitive' | 'meaning' ('all' = alle 3 Formen + Bedeutung pro Verb)
 let lastVerbWrongAnswer = '';
 
 const verbTargetLabels = {
   past: 'Simple Past (1. Form)',
   participle: 'Past Participle (2. Form)',
+  infinitive: 'Infinitiv (Grundform)',
   meaning: 'Bedeutung'
 };
 
@@ -45,15 +46,22 @@ function activeVerbTarget() {
 function getVerbTargetLabel() {
   const target = activeVerbTarget();
   if (target === 'all') {
-    return 'alle 3 Formen (1. Form → 2. Form → Bedeutung)';
+    return 'alle 3 Formen + Bedeutung';
   }
   return verbTargetLabels[target] || 'Simple Past';
 }
 
 function renderVerbQuestionText(verb) {
-  // Bei „Bedeutung“ darf der deutsche Kontext nicht verraten werden.
+  // Die Antwort darf nicht verraten werden:
+  // „Bedeutung“ → nur die englische Form zeigen, „Infinitiv“ → nur 1. Form + Deutsch (keine englische Grundform).
   const target = activeVerbTarget();
-  return target === 'meaning' ? verb.infinitive : `${verb.infinitive}  (${verb.german})`;
+  if (target === 'meaning') {
+    return verb.infinitive;
+  }
+  if (target === 'infinitive') {
+    return `${verb.past}  (${verb.german})`;
+  }
+  return `${verb.infinitive}  (${verb.german})`;
 }
 
 function getDirectionConfig() {
@@ -63,7 +71,11 @@ function getDirectionConfig() {
 function updateAnswerInput() {
   const answerInput = document.getElementById('german-input');
   if (learnMode === 'tenses') {
-    answerInput.placeholder = activeVerbTarget() === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
+    answerInput.placeholder = activeVerbTarget() === 'meaning'
+      ? 'Deutsche Bedeutung'
+      : activeVerbTarget() === 'infinitive'
+        ? 'Englische Grundform (Infinitiv)'
+        : 'Englische Form';
   } else {
     answerInput.placeholder = getDirectionConfig().answerPlaceholder;
   }
@@ -81,10 +93,21 @@ function updateModeUI() {
   const answerInput = document.getElementById('german-input');
 
   if (learnMode === 'tenses') {
-    directionBanner.textContent = `Zeitformen: Infinitiv (Grundform) → ${getVerbTargetLabel()}`;
-    questionLabel.textContent = 'Verb (Infinitiv, Grundform)';
+    const target = activeVerbTarget();
+    if (target === 'all') {
+      directionBanner.textContent = 'Zeitformen: 1. Form → 2. Form → Infinitiv → Bedeutung';
+    } else if (target === 'infinitive') {
+      directionBanner.textContent = 'Zeitformen: Simple Past (1. Form) → Infinitiv (Grundform)';
+    } else {
+      directionBanner.textContent = `Zeitformen: Infinitiv (Grundform) → ${getVerbTargetLabel()}`;
+    }
+    questionLabel.textContent = target === 'infinitive' ? 'Simple Past (1. Form)' : 'Verb (Infinitiv, Grundform)';
     answerLabel.textContent = getVerbTargetLabel();
-    answerInput.placeholder = activeVerbTarget() === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
+    answerInput.placeholder = target === 'meaning'
+      ? 'Deutsche Bedeutung'
+      : target === 'infinitive'
+        ? 'Englische Grundform (Infinitiv)'
+        : 'Englische Form';
     document.querySelector('.ai-desc').textContent =
       'Der KI-Coach erklärt alle drei Formen, Form-Gruppen, Eselsbrücken und Beispielsätze (Basis: englisch-hilfen.de).';
   } else {
@@ -158,13 +181,14 @@ function rebuildVerbQueue() {
     return;
   }
   if (verbTarget === 'all') {
-    // „Alle 3“-Modus: Jedes Verb wird nacheinander mit allen drei Fragearten abgefragt
+    // „Alle 3 Formen + Bedeutung“-Modus: Jedes Verb wird nacheinander mit allen drei
     // (sinnvolle Reihenfolge: 1. Form → 2. Form → deutsche Bedeutung), dazwischen neue Verben.
     const expanded = [];
     for (const verb of shuffle(verbs)) {
       expanded.push(
         { ...verb, target: 'past' },
         { ...verb, target: 'participle' },
+        { ...verb, target: 'infinitive' },
         { ...verb, target: 'meaning' }
       );
     }
@@ -489,7 +513,7 @@ function renderUpcomingWords() {
     row.className = 'upcoming-item';
     if (item.infinitive) {
       const itemTarget = item.target || verbTarget;
-      const itemLabel = itemTarget === 'all' ? 'alle 3 Formen' : (verbTargetLabels[itemTarget] || itemTarget);
+      const itemLabel = itemTarget === 'all' ? 'alle 3 + Bedeutung' : (verbTargetLabels[itemTarget] || itemTarget);
       row.textContent = `${index + 1}. ${item.infinitive} → ${itemLabel}`;
     } else {
       const config = getDirectionConfig();
