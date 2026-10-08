@@ -22,29 +22,122 @@ const directionConfig = {
   }
 };
 
+// ── Lernmodus „Zeitformen“ (unregelmäßige Verben) ──────────────────────────
+let learnMode = 'words'; // 'words' | 'tenses'
+let verbs = [];
+let verbQueue = [];
+let currentVerb = null;
+let verbTarget = 'all'; // 'all' | 'past' | 'participle' | 'meaning' ('all' = pro Verb alle drei Fragearten)
+let lastVerbWrongAnswer = '';
+
+const verbTargetLabels = {
+  past: 'Simple Past (1. Form)',
+  participle: 'Past Participle (2. Form)',
+  meaning: 'Bedeutung'
+};
+
+// Effektive Frageart der aktuellen Frage. In „Alle 3“-Modus hat jede Warteschlangen-Einträge
+// eine eigene Ziel-Form (item.target), sonst gilt die global gewählte Frageart.
+function activeVerbTarget() {
+  return (currentVerb && currentVerb.target) || verbTarget;
+}
+
+function getVerbTargetLabel() {
+  const target = activeVerbTarget();
+  if (target === 'all') {
+    return 'alle 3 Formen (1. Form → 2. Form → Bedeutung)';
+  }
+  return verbTargetLabels[target] || 'Simple Past';
+}
+
+function renderVerbQuestionText(verb) {
+  // Bei „Bedeutung“ darf der deutsche Kontext nicht verraten werden.
+  const target = activeVerbTarget();
+  return target === 'meaning' ? verb.infinitive : `${verb.infinitive}  (${verb.german})`;
+}
+
 function getDirectionConfig() {
   return directionConfig[learningDirection] || directionConfig['de-en'];
 }
 
 function updateAnswerInput() {
   const answerInput = document.getElementById('german-input');
-  const config = getDirectionConfig();
-  answerInput.placeholder = config.answerPlaceholder;
+  if (learnMode === 'tenses') {
+    answerInput.placeholder = activeVerbTarget() === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
+  } else {
+    answerInput.placeholder = getDirectionConfig().answerPlaceholder;
+  }
   updateQuizLabels();
 }
 
 function updateQuizLabels() {
-  const config = getDirectionConfig();
+  updateModeUI();
+}
+
+function updateModeUI() {
   const directionBanner = document.getElementById('direction-banner');
   const questionLabel = document.getElementById('question-label');
   const answerLabel = document.getElementById('answer-label');
+  const answerInput = document.getElementById('german-input');
 
-  directionBanner.textContent = config.questionKey === 'english'
-    ? 'Deutsch → Englisch'
-    : 'Englisch → Deutsch';
+  if (learnMode === 'tenses') {
+    directionBanner.textContent = `Zeitformen: Infinitiv (Grundform) → ${getVerbTargetLabel()}`;
+    questionLabel.textContent = 'Verb (Infinitiv, Grundform)';
+    answerLabel.textContent = getVerbTargetLabel();
+    answerInput.placeholder = activeVerbTarget() === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
+    document.querySelector('.ai-desc').textContent =
+      'Der KI-Coach erklärt alle drei Formen, Form-Gruppen, Eselsbrücken und Beispielsätze (Basis: englisch-hilfen.de).';
+  } else {
+    const config = getDirectionConfig();
+    directionBanner.textContent = config.questionKey === 'english'
+      ? 'Deutsch → Englisch'
+      : 'Englisch → Deutsch';
+    questionLabel.textContent = config.questionKey === 'english' ? 'Deutsch' : 'Englisch';
+    answerLabel.textContent = config.questionKey === 'english' ? 'Englisch' : 'Deutsch';
+    answerInput.placeholder = config.answerPlaceholder;
+    document.querySelector('.ai-desc').textContent =
+      'Frage den KI-Assistenten zu Konjugation, Beispielsätzen und Synonymen.';
+  }
+  updateAiButtonLabel();
+}
 
-  questionLabel.textContent = config.questionKey === 'english' ? 'Deutsch' : 'Englisch';
-  answerLabel.textContent = config.questionKey === 'english' ? 'Englisch' : 'Deutsch';
+function updateAiButtonLabel() {
+  const label = document.getElementById('ai-btn-label');
+  if (!label) {
+    return;
+  }
+  label.textContent = learnMode === 'tenses'
+    ? (lastVerbWrongAnswer ? 'Fehler erklären' : 'Verb erklären')
+    : 'KI-Info anfragen';
+}
+
+function syncModeUI() {
+  const isTenses = learnMode === 'tenses';
+  document.querySelectorAll('#mode-toggle .seg-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === learnMode);
+  });
+  document.getElementById('dataset-field').classList.toggle('hidden', isTenses);
+  document.getElementById('direction-field').classList.toggle('hidden', isTenses);
+  document.getElementById('target-field').classList.toggle('hidden', !isTenses);
+  document.getElementById('dataset-section').classList.toggle('hidden', isTenses);
+  document.getElementById('addword-section').classList.toggle('hidden', isTenses);
+  document.getElementById('total-words-label').textContent = isTenses ? 'Verben gesamt' : 'Wörter gesamt';
+  updateModeUI();
+}
+
+function setLearnMode(mode) {
+  if (mode === learnMode) {
+    return;
+  }
+  learnMode = mode;
+  lastVerbWrongAnswer = '';
+  syncModeUI();
+  // In dem neuen Modus eine frische Runde starten.
+  if (learnMode === 'tenses') {
+    resetVerbRound();
+  } else {
+    resetQuiz(selectedDataset);
+  }
 }
 
 function shuffle(array) {
@@ -58,6 +151,70 @@ function shuffle(array) {
 
 function rebuildQueue() {
   wordQueue = shuffle(vocabulary.map(item => ({ ...item })));
+}
+
+function rebuildVerbQueue() {
+  if (verbs.length === 0) {
+    return;
+  }
+  if (verbTarget === 'all') {
+    // „Alle 3“-Modus: Jedes Verb wird nacheinander mit allen drei Fragearten abgefragt
+    // (sinnvolle Reihenfolge: 1. Form → 2. Form → deutsche Bedeutung), dazwischen neue Verben.
+    const expanded = [];
+    for (const verb of shuffle(verbs)) {
+      expanded.push(
+        { ...verb, target: 'past' },
+        { ...verb, target: 'participle' },
+        { ...verb, target: 'meaning' }
+      );
+    }
+    verbQueue = shuffle(expanded);
+    return;
+  }
+  verbQueue = shuffle(verbs.map(verb => ({ ...verb, target: verbTarget })));
+}
+
+async function loadVerbs() {
+  try {
+    const response = await fetch('/api/verbs');
+    const data = await response.json();
+    if (!data.success || !Array.isArray(data.verbs)) {
+      throw new Error('Keine Verben geladen.');
+    }
+
+    verbs = data.verbs;
+    document.getElementById('total-words').textContent = verbs.length;
+    rebuildVerbQueue();
+    renderUpcomingWords();
+
+    if (verbs.length === 0) {
+      document.getElementById('english-word').textContent = 'Keine Verben verfügbar';
+      document.getElementById('check-btn').disabled = true;
+      return;
+    }
+    showNextWord();
+  } catch (error) {
+    console.error('Fehler beim Laden der Verben:', error);
+    document.getElementById('result').textContent = 'Fehler beim Laden der unregelmäßigen Verben.';
+    document.getElementById('result').className = 'incorrect';
+  }
+}
+
+function resetVerbRound() {
+  quizFinished = false;
+  currentVerb = null;
+  lastVerbWrongAnswer = '';
+  correctCount = 0;
+  incorrectCount = 0;
+  totalCount = 0;
+  answeredWords = { correct: [], incorrect: [] };
+  updateStats();
+  document.getElementById('german-input').disabled = false;
+  document.getElementById('result').textContent = 'Runde zurückgesetzt. Lade Verben...';
+  document.getElementById('result').className = 'hint';
+  document.getElementById('next-btn').classList.add('hidden');
+  resetAiPanel();
+  loadVerbs();
 }
 
 async function loadDatasets() {
@@ -280,32 +437,39 @@ function updateWordLists() {
   answeredWords.correct.forEach(word => {
     const item = document.createElement('div');
     item.className = 'word-list-item';
-    item.textContent = `${word.english} → ${word.german}`;
+    item.textContent = formatAnsweredItem(word);
     correctList.appendChild(item);
   });
 
   answeredWords.incorrect.forEach(word => {
     const item = document.createElement('div');
     item.className = 'word-list-item';
-    item.textContent = `${word.english} → ${word.german}`;
+    item.textContent = formatAnsweredItem(word);
     incorrectList.appendChild(item);
   });
 }
 
+function formatAnsweredItem(entry) {
+  if (entry && entry.infinitive) {
+    return `${entry.infinitive} – ${entry.german}  (Past: ${entry.past} · Partizip: ${entry.participle})`;
+  }
+  return `${entry.english} → ${entry.german}`;
+}
+
 function renderUpcomingWords() {
   const list = document.getElementById('upcoming-list');
-  const config = getDirectionConfig();
   list.innerHTML = '';
 
   const seen = new Set();
   const nextWords = [];
   const pushUnique = item => {
-    const key = `${item.english}|${item.german}`;
+    const key = item.infinitive ? item.infinitive : `${item.english}|${item.german}`;
     if (seen.has(key)) return;
     seen.add(key);
     nextWords.push(item);
   };
-  for (const item of wordQueue) {
+  const queue = learnMode === 'tenses' ? verbQueue : wordQueue;
+  for (const item of queue) {
     if (nextWords.length >= 3) break;
     pushUnique(item);
   }
@@ -313,7 +477,9 @@ function renderUpcomingWords() {
   if (nextWords.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'upcoming-item';
-    empty.textContent = 'Keine bevorstehenden Wörter verfügbar.';
+    empty.textContent = learnMode === 'tenses'
+      ? 'Keine bevorstehenden Verben verfügbar.'
+      : 'Keine bevorstehenden Wörter verfügbar.';
     list.appendChild(empty);
     return;
   }
@@ -321,7 +487,14 @@ function renderUpcomingWords() {
   nextWords.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'upcoming-item';
-    row.textContent = `${index + 1}. ${item[config.questionKey]}`;
+    if (item.infinitive) {
+      const itemTarget = item.target || verbTarget;
+      const itemLabel = itemTarget === 'all' ? 'alle 3 Formen' : (verbTargetLabels[itemTarget] || itemTarget);
+      row.textContent = `${index + 1}. ${item.infinitive} → ${itemLabel}`;
+    } else {
+      const config = getDirectionConfig();
+      row.textContent = `${index + 1}. ${item[config.questionKey]}`;
+    }
     list.appendChild(row);
   });
 }
@@ -402,13 +575,14 @@ async function finishQuiz() {
   document.getElementById('finish-btn').disabled = true;
 
   const state = {
+    mode: learnMode,
     dataset: selectedDataset,
     direction: learningDirection,
     correctCount,
     incorrectCount,
     totalCount,
     answeredWords,
-    wordQueue
+    wordQueue: learnMode === 'tenses' ? verbQueue : wordQueue
   };
 
   let saved = false;
@@ -483,6 +657,32 @@ async function restoreLastState() {
 
     const saved = data.state;
     const select = document.getElementById('dataset-select');
+
+    // Zeitformen-Modus: Verben-Runde wiederherstellen (Dataset ist hier nicht relevant).
+    if (saved.mode === 'tenses') {
+      learnMode = 'tenses';
+      syncModeUI();
+
+      correctCount = Number(saved.correctCount) || 0;
+      incorrectCount = Number(saved.incorrectCount) || 0;
+      totalCount = Number(saved.totalCount) || 0;
+      answeredWords = {
+        correct: saved.answeredWords && Array.isArray(saved.answeredWords.correct) ? saved.answeredWords.correct : [],
+        incorrect: saved.answeredWords && Array.isArray(saved.answeredWords.incorrect) ? saved.answeredWords.incorrect : []
+      };
+      if (Array.isArray(saved.wordQueue) && saved.wordQueue.length > 0) {
+        verbQueue = saved.wordQueue;
+      }
+      currentVerb = null;
+
+      updateStats();
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = '🔄 Letzter Lernstand wiederhergestellt – die Verben-Runde kann fortgesetzt werden.';
+      resultDiv.className = 'hint';
+      loadVerbs();
+      return;
+    }
+
     const datasetExists = Array.from(select.options).some(option => option.value === saved.dataset);
     if (!datasetExists) {
       return;
@@ -533,6 +733,11 @@ function getNextWordFromQueue() {
 }
 
 function showNextWord() {
+  if (learnMode === 'tenses') {
+    showNextVerb();
+    return;
+  }
+
   const resultDiv = document.getElementById('result');
   const config = getDirectionConfig();
   resultDiv.textContent = 'Gib die Übersetzung ein und klicke auf Prüfen.';
@@ -558,7 +763,129 @@ function showNextWord() {
   resetAiPanel();
 }
 
+function showNextVerb() {
+  const resultDiv = document.getElementById('result');
+  resultDiv.textContent = `Gib ${getVerbTargetLabel()} ein und klicke auf Prüfen.`;
+  resultDiv.className = 'hint';
+
+  if (verbQueue.length === 0) {
+    rebuildVerbQueue();
+  }
+
+  currentVerb = verbQueue.shift();
+  if (!currentVerb) {
+    document.getElementById('english-word').textContent = 'Keine Verben verfügbar';
+    document.getElementById('german-input').value = '';
+    document.getElementById('check-btn').disabled = true;
+    renderUpcomingWords();
+    return;
+  }
+
+  lastVerbWrongAnswer = '';
+  document.getElementById('english-word').textContent = renderVerbQuestionText(currentVerb);
+  document.getElementById('german-input').value = '';
+  updateModeUI();
+  document.getElementById('german-input').focus();
+  document.getElementById('check-btn').disabled = false;
+  document.getElementById('next-btn').classList.add('hidden');
+  renderUpcomingWords();
+  resetAiPanel();
+}
+
+function renderCurrentVerb() {
+  if (!currentVerb) {
+    return;
+  }
+  document.getElementById('english-word').textContent = renderVerbQuestionText(currentVerb);
+  lastVerbWrongAnswer = '';
+  document.getElementById('german-input').value = '';
+  document.getElementById('check-btn').disabled = false;
+  document.getElementById('next-btn').classList.add('hidden');
+  updateAiButtonLabel();
+}
+
+async function checkVerbAnswer(autoNext = false) {
+  const resultDiv = document.getElementById('result');
+  const verb = (currentVerb && currentVerb.infinitive) || document.getElementById('english-word').textContent.trim();
+  const answer = document.getElementById('german-input').value.trim();
+
+  if (quizFinished) {
+    resultDiv.textContent = 'Das Quiz wurde beendet. Klicke auf „Neu starten“, um zu lernen.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  if (!answer) {
+    resultDiv.textContent = 'Bitte gib eine Antwort ein.';
+    resultDiv.className = 'hint';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/verb-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verb, target: activeVerbTarget(), answer })
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      resultDiv.textContent = data.message || 'Fehler beim Prüfen des Verbs.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+
+    totalCount++;
+
+    if (data.correct) {
+      correctCount++;
+      lastVerbWrongAnswer = '';
+      resultDiv.textContent = '✅ Richtig!';
+      resultDiv.className = 'correct';
+      if (currentVerb && !answeredWords.correct.some(v => v.infinitive === currentVerb.infinitive)) {
+        answeredWords.correct.push(currentVerb);
+      }
+    } else {
+      incorrectCount++;
+      lastVerbWrongAnswer = answer;
+      resultDiv.textContent = `❌ Falsch! Richtig: ${data.expected} – Klicke unten auf „Fehler erklären“ für eine Eselsbrücke vom KI-Coach.`;
+      resultDiv.className = 'incorrect';
+      // Die fehlerhafte Frage (Verb + Ziel-Form) kommt am Ende der Runde noch einmal dran –
+      // aber nur, falls sie nicht bereits als eigene Frage in der Warteschlange steht.
+      if (currentVerb && !verbQueue.some(v => v.infinitive === currentVerb.infinitive && v.target === activeVerbTarget())) {
+        verbQueue.push({ ...currentVerb, target: activeVerbTarget() });
+      }
+      if (currentVerb && !answeredWords.incorrect.some(v => v.infinitive === currentVerb.infinitive)) {
+        answeredWords.incorrect.push(currentVerb);
+      }
+    }
+
+    updateStats();
+    updateAiButtonLabel();
+    document.getElementById('check-btn').disabled = true;
+    document.getElementById('next-btn').classList.remove('hidden');
+
+    // Nur bei richtiger Antwort automatisch weiter (Enter-Tastatur-Flow).
+    // Bei falscher Antwort bleibt die Seite stehen – Zeit zum Lesen,
+    // dann manuell über „Nächstes Wort“ weiter.
+    if (autoNext && data.correct) {
+      setTimeout(() => {
+        showNextWord();
+      }, 2000);
+    }
+  } catch (error) {
+    console.error('Fehler beim Prüfen des Verbs:', error);
+    resultDiv.textContent = 'Fehler beim Prüfen der Antwort.';
+    resultDiv.className = 'incorrect';
+  }
+}
+
 async function checkAnswer(autoNext = false) {
+  if (learnMode === 'tenses') {
+    checkVerbAnswer(autoNext);
+    return;
+  }
+
   const question = document.getElementById('english-word').textContent;
   const answer = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
@@ -611,7 +938,10 @@ async function checkAnswer(autoNext = false) {
     document.getElementById('check-btn').disabled = true;
     document.getElementById('next-btn').classList.remove('hidden');
 
-    if (autoNext) {
+    // Nur bei richtiger Antwort automatisch weiter (Enter-Tastatur-Flow).
+    // Bei falscher Antwort bleibt die Seite stehen – Zeit zum Lesen,
+    // dann manuell über „Nächstes Wort“ weiter.
+    if (autoNext && data.correct) {
       setTimeout(() => {
         showNextWord();
       }, 2000);
@@ -629,7 +959,14 @@ async function fetchAiHelper() {
   const resultDiv = document.getElementById('ai-result');
   const aiBtn = document.getElementById('ai-btn');
 
-  if (!word || word === 'Lädt...' || word === 'Keine Wörter verfügbar') {
+  if (learnMode === 'tenses' && !currentVerb) {
+    resultDiv.textContent = 'Bitte warte, bis ein Verb geladen ist.';
+    resultDiv.classList.remove('hidden');
+    resultDiv.classList.add('ai-error');
+    return;
+  }
+
+  if (learnMode !== 'tenses' && (!word || word === 'Lädt...' || word === 'Keine Wörter verfügbar')) {
     resultDiv.textContent = 'Bitte warte, bis ein Wort geladen ist.';
     resultDiv.classList.remove('hidden');
     resultDiv.classList.add('ai-error');
@@ -646,7 +983,9 @@ async function fetchAiHelper() {
     const response = await fetch('/api/ai-helper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word })
+      body: JSON.stringify(learnMode === 'tenses'
+        ? { verb: currentVerb, target: activeVerbTarget(), userAnswer: lastVerbWrongAnswer }
+        : { word })
     });
 
     const data = await response.json();
@@ -702,9 +1041,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('delete-dataset-btn').addEventListener('click', deleteDataset);
   document.getElementById('ai-btn').addEventListener('click', fetchAiHelper);
 
+  document.querySelectorAll('#mode-toggle .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLearnMode(btn.dataset.mode));
+  });
+
+  document.getElementById('verb-target-select').addEventListener('change', (event) => {
+    verbTarget = event.target.value;
+    updateModeUI();
+    if (learnMode === 'tenses') {
+      document.getElementById('result').textContent = 'Frageart geändert – weiter mit dem aktuellen Verb.';
+      document.getElementById('result').className = 'hint';
+      renderCurrentVerb();
+    }
+  });
+
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));
   document.getElementById('next-btn').addEventListener('click', showNextWord);
-  document.getElementById('restart-btn').addEventListener('click', () => resetQuiz(selectedDataset));
+  document.getElementById('restart-btn').addEventListener('click', () => {
+    if (learnMode === 'tenses') {
+      resetVerbRound();
+    } else {
+      resetQuiz(selectedDataset);
+    }
+  });
   document.getElementById('next-question-btn').addEventListener('click', showNextWord);
   document.getElementById('finish-btn').addEventListener('click', finishQuiz);
   document.getElementById('add-word-btn').addEventListener('click', addNewWord);

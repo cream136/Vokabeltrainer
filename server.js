@@ -12,6 +12,64 @@ const SESSION_STATE_FILE = 'session-state.json';
 
 let vocabulary = [];
 let currentDataset = DEFAULT_DATA_FILE;
+const VERB_DATA_FILE = 'verb-data.json';
+
+// ── Lernmodus Zeitformen: unregelmäßige Verben (aus PDF, Quelle: englisch-hilfen.de) ──
+let verbDataCache = null;
+
+function getVerbData() {
+  if (!verbDataCache) {
+    const filePath = path.join(DATA_DIR, VERB_DATA_FILE);
+    if (!fs.existsSync(filePath)) {
+      verbDataCache = [];
+    } else {
+      verbDataCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  }
+  return verbDataCache;
+}
+
+function findVerbEntry(infinitive) {
+  const clean = (infinitive || '').toString().trim().toLowerCase();
+  return getVerbData().find(v => v.infinitive.toLowerCase() === clean) || null;
+}
+
+// Varianten in einem Form-Feld ("was/were", "bid, bade", "borne/born (AE)") in einzelne erlaubte Antworten aufteilen
+function splitVerbVariants(value) {
+  return (value || '').toString()
+    .split(/[,\/]/)
+    .map(part => part.replace(/\s*\(AE\)\s*/g, ' ').replace(/\s*\(aus\)\s*/g, ' ').trim())
+    .filter(part => part.length > 0);
+}
+
+// Deutsche Bedeutung: flexibel prüfen ("tragen" zählt für "etwas tragen (literarisch)").
+function meaningMatches(expectedRaw, answer) {
+  const clean = value => (value || '').toString()
+    .replace(/\([^)]*\)/g, ' ')
+    .toLowerCase()
+    .replace(/[.!?]+/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 0);
+
+  const expectedWords = new Set(clean(expectedRaw));
+  const answerWords = clean(answer);
+  if (answerWords.length === 0) {
+    return false;
+  }
+
+  const hitCount = answerWords.filter(w => expectedWords.has(w)).length;
+  if (hitCount / answerWords.length >= 0.7) {
+    return true;
+  }
+  // Einzelwort-Treffer innerhalb des erwarteten Phrasenworts (z. B. "geben" in "etwas geben")
+  if (answerWords.length === 1) {
+    const core = answerWords[0];
+    if ([...expectedWords].some(w => w.includes(core) || core.includes(w))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 app.use(express.json());
 app.use(express.static('public'));
@@ -323,6 +381,38 @@ app.post('/api/check', (req, res) => {
   res.json({ correct: isCorrect, correctAnswer: expectedAnswer });
 });
 
+// ── Lernmodus Zeitformen: unregelmäßige Verben ─────────────────────────────
+app.get('/api/verbs', (req, res) => {
+  const verbs = getVerbData();
+  res.json({ success: true, verbs });
+});
+
+app.post('/api/verb-check', (req, res) => {
+  const verbRaw = (req.body.verb || '').toString().trim();
+  const target = (req.body.target || '').toString();
+  const answer = (req.body.answer || '').toString().trim();
+
+  if (!verbRaw || !answer) {
+    return res.status(400).json({ success: false, message: 'Verb und Antwort sind erforderlich.' });
+  }
+  if (!['past', 'participle', 'meaning'].includes(target)) {
+    return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: past, participle, meaning.' });
+  }
+
+  const entry = findVerbEntry(verbRaw);
+  if (!entry) {
+    return res.status(404).json({ success: false, message: 'Dieses Verb ist nicht in der Liste der unregelmäßigen Verben enthalten.' });
+  }
+
+  const expectedRaw = target === 'past' ? entry.past : target === 'participle' ? entry.participle : entry.german;
+  const accepted = splitVerbVariants(expectedRaw).map(v => v.toLowerCase());
+  const correct = target === 'meaning'
+    ? (accepted.includes(answer.toLowerCase()) || meaningMatches(expectedRaw, answer))
+    : accepted.includes(answer.toLowerCase());
+
+  res.json({ success: true, correct, expected: expectedRaw, accepted, target, verb: entry });
+});
+
 app.post('/api/add-word', (req, res) => {
   const english = (req.body.english || '').toString().trim();
   const german = (req.body.german || '').toString().trim();
@@ -368,6 +458,7 @@ function buildStateRecord(state) {
   const answeredWords = state && state.answeredWords ? state.answeredWords : {};
   return {
     savedAt: new Date().toISOString(),
+    mode: state && state.mode === 'tenses' ? 'tenses' : 'words',
     dataset: state && state.dataset ? state.dataset : currentDataset,
     direction: state && state.direction === 'en-de' ? 'en-de' : 'de-en',
     correctCount: Number(state && state.correctCount) || 0,
@@ -437,15 +528,83 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
+// Zeitlimits pro Provider (ms): Ein zu langsamer Provider (z. B. langsames
+// lokales Modell, das gerade lädt/generiert) blockiert die Antwort nicht –
+// die Fallback-Kette wechselt einfach zum nächsten Provider.
+const AI_TIMEOUTS = {
+  ollama: parseInt(process.env.AI_OLLAMA_TIMEOUT_MS || '20000', 10),
+  openai: parseInt(process.env.AI_CLOUD_TIMEOUT_MS || '30000', 10),
+  groq: parseInt(process.env.AI_CLOUD_TIMEOUT_MS || '30000', 10),
+  gemini: parseInt(process.env.AI_CLOUD_TIMEOUT_MS || '30000', 10)
+};
+
+// Fetch mit Timeout: verhindert, dass KI-Anfragen ewig hängen.
+async function fetchWithTimeout(url, options, timeoutMs, provider) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Timeout nach ${Math.round(timeoutMs / 1000)}s bei ${provider} – wechsle zum nächsten Provider`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Lernsystem aus englisch-hilfen.de: Form-Gruppen, Präfix-Regel und Spezialfälle.
+// Dient als Wissensbasis, damit die KI Erklärungen und Eselsbrücken liefert,
+// die mit der Lehrbuchliste (Klassen 6–12) und englisch-hilfen.de übereinstimmen.
+const VERB_LEARNING_KNOWLEDGE = `Lernsystem für unregelmäßige Verben (Quelle: englisch-hilfen.de):
+1) Gruppe "alle drei Formen gleich" (keine -ed-Endung, einfach auswendig): bet–bet–bet, burst–burst–burst, cost–cost–cost, cut–cut–cut, hit–hit–hit, hurt–hurt–hurt, let–let–let, put–put–put, read–read–read, set–set–set, shut–shut–shut.
+2) Gruppe "Infinitiv = Simple Past, Partizip anders": beat–beat–beaten.
+3) Gruppe "Infinitiv = Past Participle, Simple Past anders": come–came–come, run–ran–run, become–became–become.
+4) Gruppe "Simple Past = Past Participle": bring–brought–brought, build–built–built, buy–bought–bought, catch–caught–caught, deal–dealt–dealt, feed–fed–fed, feel–felt–felt, fight–fought–fought, find–found–found, get–got–got/gotten, hang–hung–hung, have–had–had, hear–heard–heard, hold–held–held, keep–kept–kept, lay–laid–laid, lead–led–led, leave–left–left, lend–lent–lent, lose–lost–lost, make–made–made, mean–meant–meant, meet–met–met, pay–paid–paid, say–said–said, sell–sold–sold, send–sent–sent, shine–shone–shone, shoot–shot–shot, sit–sat–sat, sleep–slept–slept, slide–slid–slid, spend–spent–spent, stand–stood–stood, stick–stuck–stuck, sweep–swept–swept, swing–swung–swung, teach–taught–taught, tell–told–told, think–thought–thought, understand–understood–understood, win–won–won.
+5) Gruppe "alle drei Formen unterschiedlich": be–was/were–been, begin–began–begun, blow–blew–blown, break–broke–broken, choose–chose–chosen, do–did–done, draw–drew–drawn, drink–drank–drunk, drive–drove–driven, eat–ate–eaten, fall–fell–fallen, fly–flew–flown, forget–forgot–forgotten, freeze–froze–frozen, give–gave–given, go–went–gone, grow–grew–grown, hide–hid–hidden, know–knew–known, lie (liegen)–lay–lain, ride–rode–ridden, ring–rang–rung, rise–rose–risen, see–saw–seen, shake–shook–shaken, show–showed–shown, sing–sang–sung, sink–sank–sunk, speak–spoke–spoken, spring–sprang–sprung, steal–stole–stolen, swear–swore–sworn, swim–swam–swum, take–took–taken, tear–tore–torn, throw–threw–thrown, wake–woke–woken, wear–wore–worn, weave–wove–woven, write–wrote–written.
+Merkregeln:
+- Präfix-Regel: Grundform beherrschen, dann einfach das Präfix anhängen: bid→forbid, cast→broadcast/forecast, go→forego/undergo, stand→understand/withstand, tell→foretell, take→overtake/undertake.
+- Spezialfälle: burn, dream und show haben auch eine regelmäßige -ed-Form; "lie" (lügen) ist regelmäßig (lie–lied–lied), aber "lie" (liegen) ist unregelmäßig (lie–lay–lain); "read" (lesen) sieht in allen Formen gleich aus, wird im Simple Past aber wie "red" ausgesprochen.
+- FALSE FRIEND: become bedeutet "werden", nicht "bekommen"!`;
+
+function buildVerbTensePrompt(entry, target, userAnswer) {
+  const targetLabels = { past: 'Simple Past (1. Form)', participle: 'Past Participle (2. Form)', meaning: 'deutsche Bedeutung' };
+  const targetLabel = targetLabels[target] || 'richtigen Form';
+  const given = (userAnswer || '').toString().trim();
+  const givenText = given
+    ? `Der Schüler hat "${given}" geschrieben – das war falsch.`
+    : 'Bitte erkläre die korrekte Form ausführlich.';
+
+  return `Du bist ein erfahrener Englisch-Deutsch-Lehrer und hilfst einem Schüler (Klasse 6–12) bei unregelmäßigen Verben.
+
+Verb: ${entry.infinitive} (${entry.german})
+Richtige Formen laut Lehrbuchliste:
+- Infinitiv (Grundform): ${entry.infinitive}
+- Simple Past (1. Form): ${entry.past}
+- Past Participle (2. Form): ${entry.participle}
+Es wurde nach der Form "Simple Past / Past Participle / Bedeutung" gefragt – konkret: ${targetLabel}.
+${givenText}
+
+Nutze dieses Lernsystem (Quelle: englisch-hilfen.de), um eine passende Eselsbrücke zu bauen:
+${VERB_LEARNING_KNOWLEDGE}
+
+Erkläre dem Schüler auf Deutsch, klar, ermutigend und maximal 150 Wörter, mit Markdown:
+1. **Warum die gegebene Antwort nicht passt** (falls eine angegeben wurde).
+2. **Alle drei Formen im Überblick** – zeige sie als eine Zeile "Infinitiv – Simple Past – Past Participle", nenne die Form-Gruppe, zu der das Verb gehört (z. B. "alle drei Formen gleich" oder "Simple Past = Past Participle"), und sage je Form in einem kurzen Satz, woran man sie erkennt bzw. wie man sie sich merkt. Auch wenn nur eine einzelne Form gefragt war, decken deine Erklärungen damit alle drei Formen ab.
+3. **Eselsbrücke / Merkhilfe**, die zu genau dieser Form-Gruppe passt (z. B. Präfix-Regel, Vokalwechsel-Muster, Vergleich mit einem verwandten Verb).
+4. **Ein Beispielsatz** mit der richtigen Form (Englisch + deutsche Übersetzung).`;
+}
+
 function buildAiPrompt(word) {
   return `Du bist ein erfahrener Englisch-Deutsch-Lehrer.
 Zum englischen Wort "${word}" gib mir bitte die folgenden Informationen:
 
 1. **Wortart** (Nomen / Verb / Adjektiv / Adverb / Präposition / ...)
 2. **Konjugation** – NUR wenn es ein Verb ist:
-   - Infinitiv: ...
-   - Simple Past: ...
-   - Past Participle: ...
+   - Infinitiv (Grundform): ...
+   - Simple Past (1. Form): ...
+   - Past Participle (2. Form): ...
    - Regelmäßig oder unregelmäßig?
 3. **2–3 Beispielsätze** (Englisch mit deutscher Übersetzung)
 4. **Synonyme / verwandte Wörter** (falls vorhanden)
@@ -454,8 +613,8 @@ Zum englischen Wort "${word}" gib mir bitte die folgenden Informationen:
 Sei präzise, antworte ausschließlich auf Deutsch und nutze Markdown-Formatierung.`;
 }
 
-async function callOllama(word) {
-  const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+async function callOllama(prompt) {
+  const response = await fetchWithTimeout(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -464,11 +623,11 @@ async function callOllama(word) {
       num_predict: 400, // Antwortlänge begrenzen → schnellere Antwort, keine Endlossätze
       messages: [
         { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
-        { role: 'user', content: buildAiPrompt(word) }
+        { role: 'user', content: prompt }
       ],
       stream: false
     })
-  });
+  }, AI_TIMEOUTS.ollama, 'ollama');
   if (!response.ok) {
     throw new Error(`Ollama-Fehler: ${response.status} ${await response.text()}`);
   }
@@ -476,11 +635,11 @@ async function callOllama(word) {
   return data.message?.content || data.response || '';
 }
 
-async function callOpenAI(word) {
+async function callOpenAI(prompt) {
   if (!OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY ist nicht gesetzt. Bitte trage es in der .env-Datei ein.');
   }
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -490,12 +649,12 @@ async function callOpenAI(word) {
       model: OPENAI_MODEL,
       messages: [
         { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
-        { role: 'user', content: buildAiPrompt(word) }
+        { role: 'user', content: prompt }
       ],
-      max_tokens: 1000,
+      max_tokens: 400,
       temperature: 0.3
     })
-  });
+  }, AI_TIMEOUTS.openai, 'openai');
   if (!response.ok) {
     throw new Error(`OpenAI-Fehler: ${response.status} ${await response.text()}`);
   }
@@ -503,11 +662,11 @@ async function callOpenAI(word) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGroq(word) {
+async function callGroq(prompt) {
   if (!GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen (kostenlos: https://console.groq.com/keys).');
   }
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -517,12 +676,12 @@ async function callGroq(word) {
       model: GROQ_MODEL,
       messages: [
         { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
-        { role: 'user', content: buildAiPrompt(word) }
+        { role: 'user', content: prompt }
       ],
-      max_tokens: 1000,
+      max_tokens: 400,
       temperature: 0.3
     })
-  });
+  }, AI_TIMEOUTS.groq, 'groq');
   if (!response.ok) {
     throw new Error(`Groq-Fehler: ${response.status} ${await response.text()}`);
   }
@@ -530,19 +689,20 @@ async function callGroq(word) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function callGemini(word) {
+async function callGemini(prompt) {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen (kostenlos: https://aistudio.google.com/app/apikey).');
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: buildAiPrompt(word) }] }],
-      systemInstruction: { parts: [{ text: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' }] }
+      contents: [{ parts: [{ text: prompt }] }],
+      systemInstruction: { parts: [{ text: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' }] },
+      maxOutputTokens: 400
     })
-  });
+  }, AI_TIMEOUTS.gemini, 'gemini');
   if (!response.ok) {
     throw new Error(`Gemini-Fehler: ${response.status} ${await response.text()}`);
   }
@@ -552,8 +712,19 @@ async function callGemini(word) {
 
 app.post('/api/ai-helper', async (req, res) => {
   const word = (req.body.word || '').toString().trim();
-  if (!word) {
-    return res.status(400).json({ success: false, message: 'Bitte gib ein Wort ein.' });
+  const verb = req.body.verb;
+
+  // Lernmodus Zeitformen: Verb-Fehler-Erklärung (mit englisch-hilfen.de-Wissensbasis)
+  // ansonsten: klassische Wort-Info.
+  let prompt = null;
+  if (verb && typeof verb === 'object' && verb.infinitive) {
+    prompt = buildVerbTensePrompt(verb, (req.body.target || 'past'), req.body.userAnswer || '');
+  } else if (word) {
+    prompt = buildAiPrompt(word);
+  }
+
+  if (!prompt) {
+    return res.status(400).json({ success: false, message: 'Bitte gib ein Wort oder ein Verb an.' });
   }
 
   // Fallback-Kette: Primär-Provider zuerst, danach die alternativen Provider.
@@ -567,22 +738,32 @@ app.post('/api/ai-helper', async (req, res) => {
   };
 
   const errors = [];
+  const startedAt = Date.now();
   for (const provider of chain) {
     const call = callMap[provider];
     if (!call) {
       continue;
     }
-    try {
-      const info = await call(word);
-      if (info) {
-        console.log(`KI-Hilfe über Provider: ${provider}`);
-        return res.json({ success: true, info, provider });
+    // Ein Provider liefert gelegentlich 200 mit leerem Inhalt (z. B. Groq-Rate-Limit)
+    // → bis zu 3 Versuche pro Provider, dann nächste Station in der Kette.
+    let info = '';
+    for (let attempt = 1; attempt <= 3 && !info; attempt++) {
+      try {
+        info = await call(prompt);
+      } catch (error) {
+        console.error(`KI-Hilfe ${provider} fehlgeschlagen:`, error.message);
+        errors.push(`${provider}: ${error.message}`);
+        break; // Hard-Fehler (Timeout, 4xx/5xx) → sofort weiter zur nächsten Kette
       }
-      errors.push(`${provider}: leere Antwort`);
-    } catch (error) {
-      console.error(`KI-Hilfe ${provider} fehlgeschlagen:`, error.message);
-      errors.push(`${provider}: ${error.message}`);
+      if (!info && attempt < 3) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
+    if (info) {
+      console.log(`KI-Hilfe über Provider: ${provider} (${Date.now() - startedAt} ms)`);
+      return res.json({ success: true, info, provider, timeMs: Date.now() - startedAt });
+    }
+    errors.push(`${provider}: leere Antwort`);
   }
 
   res.status(502).json({

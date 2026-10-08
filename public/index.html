@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#4f6cff">
+  <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Vokabeltrainer">
@@ -19,7 +19,7 @@
     <aside class="sidebar">
       <h1>Vokabeltrainer</h1>
 
-      <section class="side-section">
+      <section class="side-section" id="dataset-section">
         <h2>Dataset verwalten</h2>
         <div class="side-row">
           <label for="dataset-name">Neu erstellen</label>
@@ -34,7 +34,7 @@
         <button id="delete-dataset-btn" class="danger">Aktuelles Dataset löschen</button>
       </section>
 
-      <section class="side-section">
+      <section class="side-section" id="addword-section">
         <h2>Wort hinzufügen</h2>
         <p class="side-note">Englisches Wort + deutsche Übersetzung.</p>
         <div class="add-col">
@@ -44,7 +44,7 @@
         </div>
       </section>
 
-      <section class="side-section">
+      <section class="side-section" id="stats-section">
         <h2>Statistik</h2>
         <div class="stats-grid">
           <div class="stat-card">
@@ -62,7 +62,7 @@
             <strong id="total-count">0</strong>
           </div>
           <div class="stat-card">
-            <span>Wörter gesamt</span>
+            <span id="total-words-label">Wörter gesamt</span>
             <strong id="total-words">0</strong>
           </div>
         </div>
@@ -73,14 +73,30 @@
     <main class="main">
       <div class="topbar">
         <div class="topbar-field">
+          <span class="topbar-field-label">Lernmodus</span>
+          <div class="seg" id="mode-toggle">
+            <button type="button" class="seg-btn active" data-mode="words">Wörter</button>
+            <button type="button" class="seg-btn" data-mode="tenses">Zeitformen</button>
+          </div>
+        </div>
+        <div class="topbar-field" id="dataset-field">
           <label for="dataset-select">Dataset</label>
           <select id="dataset-select"></select>
         </div>
-        <div class="topbar-field">
+        <div class="topbar-field" id="direction-field">
           <label for="direction-select">Lernrichtung</label>
           <select id="direction-select">
             <option value="de-en">Deutsch → Englisch</option>
             <option value="en-de">Englisch → Deutsch</option>
+          </select>
+        </div>
+        <div class="topbar-field hidden" id="target-field">
+          <label for="verb-target-select">Frageart</label>
+          <select id="verb-target-select">
+            <option value="all" selected>Alle 3 (Form 1 → Form 2 → Bedeutung)</option>
+            <option value="past">Simple Past (1. Form)</option>
+            <option value="participle">Past Participle (2. Form)</option>
+            <option value="meaning">Bedeutung (Deutsch)</option>
           </select>
         </div>
       </div>
