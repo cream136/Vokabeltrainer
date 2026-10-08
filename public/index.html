@@ -15,44 +15,77 @@
 </head>
 <body>
   <div class="container">
-    <h1>Vokabeltrainer</h1>
+    <!-- ══ Seitenleiste: Verwaltung, Wörter, Statistik ══════════════════════ -->
+    <aside class="sidebar">
+      <h1>Vokabeltrainer</h1>
 
-    <div class="dataset-row">
-      <label for="dataset-select">Dataset wählen:</label>
-      <select id="dataset-select"></select>
-    </div>
+      <section class="side-section">
+        <h2>Dataset verwalten</h2>
+        <div class="side-row">
+          <label for="dataset-name">Neu erstellen</label>
+          <input id="dataset-name" type="text" placeholder="Name ohne Extension" autocomplete="off">
+          <button id="create-dataset-btn">Erstellen</button>
+        </div>
+        <div class="side-row">
+          <label for="dataset-rename">Umbenennen</label>
+          <input id="dataset-rename" type="text" placeholder="Neuer Name ohne Extension" autocomplete="off">
+          <button id="rename-dataset-btn">Umbenennen</button>
+        </div>
+        <button id="delete-dataset-btn" class="danger">Aktuelles Dataset löschen</button>
+      </section>
 
-    <div class="direction-row">
-      <label for="direction-select">Lernrichtung:</label>
-      <select id="direction-select">
-        <option value="de-en">Deutsch → Englisch</option>
-        <option value="en-de">Englisch → Deutsch</option>
-      </select>
-    </div>
-
-    <div class="dataset-create-row">
-      <label for="dataset-name">Neues Dataset erstellen:</label>
-      <input id="dataset-name" type="text" placeholder="Name ohne Extension" autocomplete="off">
-      <button id="create-dataset-btn">Erstellen</button>
-    </div>
-
-    <div class="dataset-rename-row">
-      <label for="dataset-rename">Dataset umbenennen:</label>
-      <input id="dataset-rename" type="text" placeholder="Neuer Name ohne Extension" autocomplete="off">
-      <button id="rename-dataset-btn">Umbenennen</button>
-      <button id="delete-dataset-btn" class="danger">Löschen</button>
-    </div>
-
-    <div class="top-grid">
-      <section class="panel preview-panel">
-        <h2>Vorschau</h2>
-        <div id="upcoming-list" class="upcoming-list">
-          <div class="upcoming-item">Lädt...</div>
+      <section class="side-section">
+        <h2>Wort hinzufügen</h2>
+        <p class="side-note">Englisches Wort + deutsche Übersetzung.</p>
+        <div class="add-col">
+          <input type="text" id="new-english" placeholder="English" autocomplete="off">
+          <input type="text" id="new-german" placeholder="German" autocomplete="off">
+          <button id="add-word-btn">Hinzufügen</button>
         </div>
       </section>
 
-      <section class="panel quiz-panel">
-        <h2>Übersetzung</h2>
+      <section class="side-section">
+        <h2>Statistik</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>Richtig</span>
+            <strong id="correct-count">0</strong>
+            <div class="word-list" id="correct-words"></div>
+          </div>
+          <div class="stat-card">
+            <span>Falsch</span>
+            <strong id="incorrect-count">0</strong>
+            <div class="word-list" id="incorrect-words"></div>
+          </div>
+          <div class="stat-card">
+            <span>Versuche</span>
+            <strong id="total-count">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Wörter gesamt</span>
+            <strong id="total-words">0</strong>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ══ Hauptbereich: Quiz steht oben ═══════════════════════════════════ -->
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-field">
+          <label for="dataset-select">Dataset</label>
+          <select id="dataset-select"></select>
+        </div>
+        <div class="topbar-field">
+          <label for="direction-select">Lernrichtung</label>
+          <select id="direction-select">
+            <option value="de-en">Deutsch → Englisch</option>
+            <option value="en-de">Englisch → Deutsch</option>
+          </select>
+        </div>
+      </div>
+
+      <section class="quiz-card">
         <div id="direction-banner" class="direction-banner">Deutsch → Englisch</div>
         <div id="word-container">
           <div class="word-pair">
@@ -68,21 +101,6 @@
           </div>
           <div id="result"></div>
         </div>
-        <!-- KI-Hilfe Panel -->
-        <div id="ai-panel" class="ai-panel">
-          <div class="ai-header">
-            <span class="ai-icon">✨</span>
-            <span class="ai-title">KI-Hilfe</span>
-          </div>
-          <div class="ai-body">
-            <p class="ai-desc">Frage den KI-Assistenten zu Konjugation, Beispielsätzen und Synonymen.</p>
-            <button id="ai-btn" type="button" class="ai-trigger-btn">
-              <span id="ai-btn-label">KI-Info anfragen</span>
-              <span id="ai-spinner" class="ai-spinner hidden"></span>
-            </button>
-            <div id="ai-result" class="ai-result hidden"></div>
-          </div>
-        </div>
 
         <div class="button-row">
           <button id="next-btn" class="hidden">Nächstes Wort</button>
@@ -90,38 +108,31 @@
           <button id="restart-btn" class="secondary">Neu starten</button>
           <button id="finish-btn" class="danger">Beenden</button>
         </div>
-        <div class="add-word-panel">
-          <h3>Neues Wort hinzufügen</h3>
-          <div class="panel-note">Gib ein englisches Wort und seine deutsche Übersetzung ein.</div>
-          <div class="add-row">
-            <input type="text" id="new-english" placeholder="English">
-            <input type="text" id="new-german" placeholder="German">
-            <button id="add-word-btn">Hinzufügen</button>
-          </div>
+      </section>
+
+      <!-- KI-Hilfe -->
+      <div id="ai-panel" class="ai-panel">
+        <div class="ai-header">
+          <span class="ai-icon">✨</span>
+          <span class="ai-title">KI-Hilfe</span>
+        </div>
+        <div class="ai-body">
+          <p class="ai-desc">Frage den KI-Assistenten zu Konjugation, Beispielsätzen und Synonymen.</p>
+          <button id="ai-btn" type="button" class="ai-trigger-btn">
+            <span id="ai-btn-label">KI-Info anfragen</span>
+            <span id="ai-spinner" class="ai-spinner hidden"></span>
+          </button>
+          <div id="ai-result" class="ai-result hidden"></div>
+        </div>
+      </div>
+
+      <section class="preview-panel">
+        <h2>Vorschau</h2>
+        <div id="upcoming-list" class="upcoming-list">
+          <div class="upcoming-item">Lädt...</div>
         </div>
       </section>
-    </div>
-
-    <div class="stats-panel">
-      <div class="stat-card">
-        <span>Richtig</span>
-        <strong id="correct-count">0</strong>
-        <div class="word-list" id="correct-words"></div>
-      </div>
-      <div class="stat-card">
-        <span>Falsch</span>
-        <strong id="incorrect-count">0</strong>
-        <div class="word-list" id="incorrect-words"></div>
-      </div>
-      <div class="stat-card">
-        <span>Versuche</span>
-        <strong id="total-count">0</strong>
-      </div>
-      <div class="stat-card">
-        <span>Anzahl der gesamten Fragen in der Excel Tabelle</span>
-        <strong id="total-words">0</strong>
-      </div>
-    </div>
+    </main>
   </div>
   <script src="script.js"></script>
 </body>

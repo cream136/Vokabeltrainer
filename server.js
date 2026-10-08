@@ -460,6 +460,8 @@ async function callOllama(word) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: OLLAMA_MODEL,
+      keep_alive: '30m', // Modell nach dem Laden 30 Min. im Speicher halten (schnelle Folge-Abfragen)
+      num_predict: 400, // Antwortlänge begrenzen → schnellere Antwort, keine Endlossätze
       messages: [
         { role: 'system', content: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' },
         { role: 'user', content: buildAiPrompt(word) }
