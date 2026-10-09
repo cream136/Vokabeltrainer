@@ -24,3 +24,5 @@ session-state.json
 .DS_Store
 Thumbs.db
 .vscode/
+.vs/
+.claude/launch.json

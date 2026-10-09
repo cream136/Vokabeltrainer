@@ -1,12 +1,24 @@
-require('dotenv').config();
 const express = require('express');
 const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+// Prüf-Logik und CSV teilen sich Server und App (public/core.js, UMD).
+const Core = require('./public/core.js');
+
+// Schreibbares Datenverzeichnis: Datasets, Lernstand, .env.
+// Im Entwicklungsbetrieb ist das der Projektordner; die Electron-App übergibt
+// per VOKABEL_DATA_DIR ihren userData-Ordner, weil app.asar schreibgeschützt ist.
+const APP_DIR = path.resolve(__dirname);
+const DATA_DIR = path.resolve(process.env.VOKABEL_DATA_DIR || APP_DIR);
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// .env zuerst aus dem Datenverzeichnis, sonst aus dem Projektordner.
+require('dotenv').config({ path: [path.join(DATA_DIR, '.env'), path.join(APP_DIR, '.env')] });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.resolve(__dirname);
+// 0.0.0.0 = aus dem lokalen Netz erreichbar (Handy-PWA); HOST=127.0.0.1 für nur-lokal.
+const HOST = process.env.HOST || '0.0.0.0';
 const DEFAULT_DATA_FILE = 'IT.csv';
 const SESSION_STATE_FILE = 'session-state.json';
 
@@ -19,68 +31,35 @@ let verbDataCache = null;
 
 function getVerbData() {
   if (!verbDataCache) {
-    const filePath = path.join(DATA_DIR, VERB_DATA_FILE);
-    if (!fs.existsSync(filePath)) {
-      verbDataCache = [];
-    } else {
-      verbDataCache = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
+    // Eine Kopie im Datenverzeichnis darf die mitgelieferte Liste (public/) überschreiben.
+    const filePath = [path.join(DATA_DIR, VERB_DATA_FILE), path.join(APP_DIR, 'public', VERB_DATA_FILE)]
+      .find(candidate => fs.existsSync(candidate));
+    verbDataCache = filePath ? JSON.parse(fs.readFileSync(filePath, 'utf8')) : [];
   }
   return verbDataCache;
 }
 
-function findVerbEntry(infinitive) {
-  const clean = (infinitive || '').toString().trim().toLowerCase();
-  return getVerbData().find(v => v.infinitive.toLowerCase() === clean) || null;
-}
-
-// Varianten in einem Form-Feld ("was/were", "bid, bade", "borne/born (AE)") in einzelne erlaubte Antworten aufteilen
-function splitVerbVariants(value) {
-  return (value || '').toString()
-    .split(/[,\/]/)
-    .map(part => part.replace(/\s*\(AE\)\s*/g, ' ').replace(/\s*\(aus\)\s*/g, ' ').trim())
-    .filter(part => part.length > 0);
-}
-
-// Deutsche Bedeutung: flexibel prüfen ("tragen" zählt für "etwas tragen (literarisch)").
-function meaningMatches(expectedRaw, answer) {
-  const clean = value => (value || '').toString()
-    .replace(/\([^)]*\)/g, ' ')
-    .toLowerCase()
-    .replace(/[.!?]+/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 0);
-
-  const expectedWords = new Set(clean(expectedRaw));
-  const answerWords = clean(answer);
-  if (answerWords.length === 0) {
-    return false;
-  }
-
-  const hitCount = answerWords.filter(w => expectedWords.has(w)).length;
-  if (hitCount / answerWords.length >= 0.7) {
-    return true;
-  }
-  // Einzelwort-Treffer innerhalb des erwarteten Phrasenworts (z. B. "geben" in "etwas geben")
-  if (answerWords.length === 1) {
-    const core = answerWords[0];
-    if ([...expectedWords].some(w => w.includes(core) || core.includes(w))) {
-      return true;
-    }
-  }
-  return false;
+// Nur Anfragen vom eigenen Rechner dürfen den Server beenden.
+function isLoopbackRequest(req) {
+  const address = (req.socket && req.socket.remoteAddress) || '';
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
 }
 
 app.use(express.json());
-app.use(express.static('public'));
-
-function escapeCsv(value) {
-  const text = value.toString().trim();
-  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-    return '"' + text.replace(/"/g, '""') + '"';
+// CORS für die Capacitor-App (Origin capacitor://localhost bzw. http://localhost),
+// die den Server nur noch als KI-Proxy nutzt.
+app.use('/api', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
   }
-  return text;
-}
+  next();
+});
+app.use(express.static(path.join(APP_DIR, 'public')));
+
+const escapeCsv = Core.escapeCsv;
 
 function getDatasetFiles() {
   const files = fs.readdirSync(DATA_DIR);
@@ -89,21 +68,7 @@ function getDatasetFiles() {
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
-function normalizeDatasetName(name, defaultExtension = '.csv') {
-  const safeName = path.basename(name || '').trim();
-  if (!safeName) {
-    return null;
-  }
-
-  const normalized = safeName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-  const ext = path.extname(normalized).toLowerCase();
-
-  if (ext === '.csv' || ext === '.xlsx') {
-    return normalized;
-  }
-
-  return `${normalized}${defaultExtension}`;
-}
+const normalizeDatasetName = Core.normalizeDatasetName;
 
 function resolveDatasetPath(dataset) {
   const safeName = path.basename(dataset || '');
@@ -342,8 +307,9 @@ app.post('/api/datasets/delete', (req, res) => {
 app.get('/api/vocabulary', (req, res) => {
   const dataset = req.query.dataset || currentDataset;
   try {
-    loadVocabulary(dataset);
-    res.json(vocabulary);
+    // Nur lesen – das serverweite currentDataset bleibt unangetastet, damit
+    // mehrere Clients sich nicht gegenseitig das Dataset umstellen.
+    res.json(getVocabularyFor(dataset));
   } catch (error) {
     console.error('Error loading dataset:', error);
     res.status(500).json({ error: 'Dataset konnte nicht geladen werden.' });
@@ -367,18 +333,7 @@ app.post('/api/check', (req, res) => {
     return res.status(404).json({ correct: false, correctAnswer: 'Unknown word' });
   }
 
-  const correctWord = direction === 'en-de'
-    ? words.find(v => v.german.toLowerCase() === normalizedQuestion)
-    : words.find(v => v.english.toLowerCase() === normalizedQuestion);
-
-  if (!correctWord) {
-    return res.json({ correct: false, correctAnswer: 'Unknown word' });
-  }
-
-  const expectedAnswer = direction === 'en-de' ? correctWord.english : correctWord.german;
-  const isCorrect = expectedAnswer.toLowerCase() === normalizedAnswer;
-
-  res.json({ correct: isCorrect, correctAnswer: expectedAnswer });
+  res.json(Core.checkWord(words, normalizedQuestion, normalizedAnswer, direction));
 });
 
 // ── Lernmodus Zeitformen: unregelmäßige Verben ─────────────────────────────
@@ -395,45 +350,16 @@ app.post('/api/verb-check', (req, res) => {
   if (!verbRaw || !answer) {
     return res.status(400).json({ success: false, message: 'Verb und Antwort sind erforderlich.' });
   }
-  if (!['all', 'past', 'participle', 'meaning', 'infinitive'].includes(target)) {
+  if (!Core.VERB_TARGETS.includes(target)) {
     return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: all, past, participle, meaning, infinitive.' });
   }
 
-  const entry = findVerbEntry(verbRaw);
+  const entry = Core.findVerbEntry(getVerbData(), verbRaw);
   if (!entry) {
     return res.status(404).json({ success: false, message: 'Dieses Verb ist nicht in der Liste der unregelmäßigen Verben enthalten.' });
   }
 
-  if (target === 'all') {
-    // Standard-Frage: Deutsches Wort → alle 3 Formen (Infinitiv, Past, Partizip) in einer Antwort.
-    // Jede erwartete Form (inkl. Varianten wie „was/were“ oder „born (AE)“) muss vorkommen;
-    // fremde zusätzliche Wörter zählen als falsch.
-    const forms = [entry.infinitive, entry.past, entry.participle];
-    const variantsFor = form => splitVerbVariants(form).map(v => v.toLowerCase());
-    const allVariants = [...new Set(forms.flatMap(variantsFor))];
-    const answerTokens = answer.toLowerCase()
-      .split(/[\s,;]+/)
-      .map(token => token.replace(/\s*\(ae\)\s*/g, '').replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-    const covered = forms.every(form => variantsFor(form).some(v => answerTokens.includes(v)));
-    const noStrayTokens = answerTokens.length > 0 && answerTokens.every(token => allVariants.includes(token));
-    return res.json({
-      success: true,
-      correct: covered && noStrayTokens,
-      expected: forms.join(' · '),
-      accepted: allVariants,
-      target,
-      verb: entry
-    });
-  }
-
-  const expectedRaw = target === 'past' ? entry.past : target === 'participle' ? entry.participle : target === 'infinitive' ? entry.infinitive : entry.german;
-  const accepted = splitVerbVariants(expectedRaw).map(v => v.toLowerCase());
-  const correct = target === 'meaning'
-    ? (accepted.includes(answer.toLowerCase()) || meaningMatches(expectedRaw, answer))
-    : accepted.includes(answer.toLowerCase());
-
-  res.json({ success: true, correct, expected: expectedRaw, accepted, target, verb: entry });
+  res.json({ success: true, ...Core.checkVerb(entry, target, answer) });
 });
 
 app.post('/api/add-word', (req, res) => {
@@ -477,27 +403,12 @@ app.post('/api/add-word', (req, res) => {
 });
 
 // ── Session-State: Speichern & Beenden ──────────────────────────────────────
-function buildStateRecord(state) {
-  const answeredWords = state && state.answeredWords ? state.answeredWords : {};
-  return {
-    savedAt: new Date().toISOString(),
-    mode: state && state.mode === 'tenses' ? 'tenses' : 'words',
-    dataset: state && state.dataset ? state.dataset : currentDataset,
-    direction: state && state.direction === 'en-de' ? 'en-de' : 'de-en',
-    correctCount: Number(state && state.correctCount) || 0,
-    incorrectCount: Number(state && state.incorrectCount) || 0,
-    totalCount: Number(state && state.totalCount) || 0,
-    answeredWords: {
-      correct: answeredWords && Array.isArray(answeredWords.correct) ? answeredWords.correct : [],
-      incorrect: answeredWords && Array.isArray(answeredWords.incorrect) ? answeredWords.incorrect : []
-    },
-    incorrectWords: state && Array.isArray(state.incorrectWords) ? state.incorrectWords : [],
-    wordQueue: state && Array.isArray(state.wordQueue) ? state.wordQueue : []
-  };
-}
-
 app.post('/api/finish', (req, res) => {
-  const record = buildStateRecord(req.body);
+  if (!isLoopbackRequest(req)) {
+    return res.status(403).json({ success: false, message: 'Beenden ist nur vom Rechner aus möglich, auf dem der Server läuft.' });
+  }
+
+  const record = Core.buildStateRecord(req.body, currentDataset);
   const statePath = path.join(DATA_DIR, SESSION_STATE_FILE);
 
   try {
@@ -723,7 +634,7 @@ async function callGemini(prompt) {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       systemInstruction: { parts: [{ text: 'Du bist ein freundlicher, präziser Englisch-Deutsch-Lehrer. Antworte immer auf Deutsch.' }] },
-      maxOutputTokens: 400
+      generationConfig: { maxOutputTokens: 400, temperature: 0.3 }
     })
   }, AI_TIMEOUTS.gemini, 'gemini');
   if (!response.ok) {
@@ -770,12 +681,14 @@ app.post('/api/ai-helper', async (req, res) => {
     // Ein Provider liefert gelegentlich 200 mit leerem Inhalt (z. B. Groq-Rate-Limit)
     // → bis zu 3 Versuche pro Provider, dann nächste Station in der Kette.
     let info = '';
+    let failed = false;
     for (let attempt = 1; attempt <= 3 && !info; attempt++) {
       try {
         info = await call(prompt);
       } catch (error) {
         console.error(`KI-Hilfe ${provider} fehlgeschlagen:`, error.message);
         errors.push(`${provider}: ${error.message}`);
+        failed = true;
         break; // Hard-Fehler (Timeout, 4xx/5xx) → sofort weiter zur nächsten Kette
       }
       if (!info && attempt < 3) {
@@ -786,7 +699,9 @@ app.post('/api/ai-helper', async (req, res) => {
       console.log(`KI-Hilfe über Provider: ${provider} (${Date.now() - startedAt} ms)`);
       return res.json({ success: true, info, provider, timeMs: Date.now() - startedAt });
     }
-    errors.push(`${provider}: leere Antwort`);
+    if (!failed) {
+      errors.push(`${provider}: leere Antwort`);
+    }
   }
 
   res.status(502).json({
@@ -795,10 +710,13 @@ app.post('/api/ai-helper', async (req, res) => {
   });
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, HOST, () => {
   loadVocabulary(DEFAULT_DATA_FILE);
+  console.log(`Datenverzeichnis: ${DATA_DIR}`);
   console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Server also accessible at http://0.0.0.0:${PORT} (for network access)`);
+  if (HOST === '0.0.0.0') {
+    console.log(`Server also accessible from the local network on port ${PORT}`);
+  }
 });
 
 server.on('error', (err) => {

@@ -60,9 +60,32 @@ npm run build:win
 # → dist/  (NSIS-Installer)
 ```
 
+## Android & iOS (Capacitor)
+
+Die App läuft auf dem Handy **ohne Server**: Prüf-Logik ([public/core.js](public/core.js)) und Daten liegen auf dem Gerät
+(Capacitor Preferences). Nur die KI-Hilfe geht über den Vokabeltrainer-Server als Proxy – die Adresse
+trägst du in der App unter *Einstellungen → KI-Server* ein (z. B. `http://192.168.1.10:3000`).
+
+```bash
+npm run cap:sync          # public/ in android/ und ios/ kopieren (nach jeder Änderung am Frontend)
+npm run cap:android       # Android Studio öffnen → Run auf Gerät/Emulator
+npm run cap:ios           # Xcode öffnen (nur macOS) → Run auf Gerät/Simulator
+```
+
+- Voraussetzungen: Android Studio (Android), Xcode + CocoaPods auf einem Mac (iOS).
+- Beim ersten Start werden die CSV-Listen aus `public/data/` ins Gerät übernommen; danach lassen sich
+  Listen in der App anlegen, per **CSV importieren** einlesen und per **CSV exportieren** teilen.
+- Zum Testen des Geräte-Modus im Browser: `http://localhost:3000/?local=1` (nutzt `localStorage`).
+
+## Datenverzeichnis
+
+- `npm start` / `npm run electron`: Datasets, `verb-data.json`, `.env` und der Lernstand (`session-state.json`) liegen im Projektordner.
+- Installierte App (gebaut mit `npm run build:win`): alles liegt in `%APPDATA%\Vokabeltrainer\data` (macOS: `~/Library/Application Support/Vokabeltrainer/data`). Beim ersten Start werden die mitgelieferten CSVs und die Verbliste dorthin kopiert; die `.env` mit API-Keys dort ablegen.
+- Umgebungsvariablen: `VOKABEL_DATA_DIR` setzt das Verzeichnis explizit, `HOST=127.0.0.1` schränkt den Server auf den eigenen Rechner ein (Standard `0.0.0.0` für die Handy-PWA im WLAN). „Beenden“ ist nur vom lokalen Rechner aus möglich.
+
 ## Datenformat
 
-Jede CSV-Datei im Projektordner mit den Spalten `English` und `German`:
+Jede CSV-Datei im Datenverzeichnis mit den Spalten `English` und `German`:
 ```csv
 English,German
 hello,hallo
@@ -79,7 +102,9 @@ world,Welt
 ├── public/
 │   ├── index.html       # Frontend
 │   ├── script.js        # Frontend-Logik
-│   └── style.css        # Styling
+│   ├── style.css        # Styling
+│   └── sw.js            # Service Worker (PWA)
+├── verb-data.json       # Unregelmäßige Verben (Lernmodus Zeitformen)
 └── *.csv                # Vokabel-Datensätze
 ```
 

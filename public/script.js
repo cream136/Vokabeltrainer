@@ -7,18 +7,27 @@ let totalCount = 0;
 let answeredWords = { correct: [], incorrect: [] };
 let selectedDataset = '';
 let learningDirection = 'de-en';
-let quizFinished = false;
 
+// Speicher-Schicht (storage.js): ServerStore (Express-API) oder LocalStore (Capacitor-App / ?local=1)
+let store = null;
+
+// de-en: deutsches Wort wird gezeigt, englische Übersetzung ist gefragt – en-de umgekehrt.
 const directionConfig = {
   'de-en': {
-    questionKey: 'english',
-    answerKey: 'german',
-    answerPlaceholder: 'Deutsche Übersetzung'
-  },
-  'en-de': {
     questionKey: 'german',
     answerKey: 'english',
+    questionLabel: 'Deutsch',
+    answerLabel: 'Englisch',
+    banner: 'Deutsch → Englisch',
     answerPlaceholder: 'Englische Übersetzung'
+  },
+  'en-de': {
+    questionKey: 'english',
+    answerKey: 'german',
+    questionLabel: 'Englisch',
+    answerLabel: 'Deutsch',
+    banner: 'Englisch → Deutsch',
+    answerPlaceholder: 'Deutsche Übersetzung'
   }
 };
 
@@ -102,33 +111,30 @@ function updateModeUI() {
   if (learnMode === 'tenses') {
     const target = activeVerbTarget();
     if (target === 'all') {
-      directionBanner.textContent = 'Zeitformen: Deutsch → alle 3 Formen (Infinitiv · Past · Partizip)';
+      directionBanner.textContent = 'Deutsch → alle 3 Formen';
       questionLabel.textContent = 'Deutsch';
-      answerLabel.textContent = 'Alle 3 Formen';
-      answerInput.placeholder = 'z. B. go, went, gone';
+      answerLabel.textContent = 'Infinitiv · Simple Past · Past Participle';
+      answerInput.placeholder = 'go, went, gone';
     } else if (target === 'infinitive') {
-      directionBanner.textContent = 'Zeitformen: Simple Past (1. Form) → Infinitiv (Grundform)';
+      directionBanner.textContent = 'Simple Past → Infinitiv';
       questionLabel.textContent = 'Simple Past (1. Form)';
       answerLabel.textContent = getVerbTargetLabel();
       answerInput.placeholder = 'Englische Grundform (Infinitiv)';
     } else {
-      directionBanner.textContent = `Zeitformen: Infinitiv (Grundform) → ${getVerbTargetLabel()}`;
+      directionBanner.textContent = `Infinitiv → ${getVerbTargetLabel()}`;
       questionLabel.textContent = 'Verb (Infinitiv, Grundform)';
       answerLabel.textContent = getVerbTargetLabel();
       answerInput.placeholder = target === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
     }
     document.querySelector('.ai-desc').textContent =
-      'Der KI-Coach erklärt alle drei Formen, Form-Gruppen, Eselsbrücken und Beispielsätze (Basis: englisch-hilfen.de).';
+      'Der KI-Coach erklärt alle drei Formen, Form-Gruppen und Eselsbrücken (Basis: englisch-hilfen.de).';
   } else {
     const config = getDirectionConfig();
-    directionBanner.textContent = config.questionKey === 'english'
-      ? 'Deutsch → Englisch'
-      : 'Englisch → Deutsch';
-    questionLabel.textContent = config.questionKey === 'english' ? 'Deutsch' : 'Englisch';
-    answerLabel.textContent = config.questionKey === 'english' ? 'Englisch' : 'Deutsch';
+    directionBanner.textContent = config.banner;
+    questionLabel.textContent = config.questionLabel;
+    answerLabel.textContent = config.answerLabel;
     answerInput.placeholder = config.answerPlaceholder;
-    document.querySelector('.ai-desc').textContent =
-      'Frage den KI-Assistenten zu Konjugation, Beispielsätzen und Synonymen.';
+    document.querySelector('.ai-desc').textContent = '';
   }
   updateAiButtonLabel();
 }
@@ -139,8 +145,100 @@ function updateAiButtonLabel() {
     return;
   }
   label.textContent = learnMode === 'tenses'
-    ? (lastVerbWrongAnswer ? 'Fehler erklären' : 'Verb erklären')
-    : 'KI-Info anfragen';
+    ? (lastVerbWrongAnswer ? 'Fehler erklären' : 'Erklären')
+    : 'KI-Info';
+}
+
+// ── Ergebnis-Karte & Button-Zustände ───────────────────────────────────────
+const ICON_CHECK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+const ICON_CROSS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
+
+function escapeHtml(text) {
+  return (text || '').toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// kind: 'correct' | 'incorrect'. chips: Liste von Strings (z. B. die 3 Verbformen).
+function showResult(kind, title, detailHtml = '', chips = []) {
+  const resultDiv = document.getElementById('result');
+  const chipsHtml = chips.length
+    ? `<div class="chips">${chips.map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('')}</div>`
+    : '';
+  resultDiv.innerHTML =
+    `<div class="result-title">${kind === 'correct' ? ICON_CHECK : ICON_CROSS}<span>${escapeHtml(title)}</span></div>` +
+    (detailHtml ? `<div class="result-detail">${detailHtml}</div>` : '') +
+    chipsHtml;
+  resultDiv.className = kind;
+  document.getElementById('german-input').classList.toggle('is-right', kind === 'correct');
+  document.getElementById('german-input').classList.toggle('is-wrong', kind === 'incorrect');
+}
+
+// Nach dem Prüfen: „Weiter“ statt „Überspringen“, Prüfen gesperrt.
+function setAnswered(answered) {
+  document.getElementById('check-btn').disabled = answered;
+  document.getElementById('next-btn').classList.toggle('hidden', !answered);
+  document.getElementById('next-question-btn').classList.toggle('hidden', answered);
+  if (!answered) {
+    const input = document.getElementById('german-input');
+    input.classList.remove('is-right', 'is-wrong');
+  }
+}
+
+// ── Design: Nachtmodus | Karteikarte (pro Gerät gespeichert) ──────────────
+const THEMES = { nacht: '#0E1013', karte: '#EEF1F6' };
+
+function applyTheme(theme) {
+  const name = THEMES[theme] ? theme : 'nacht';
+  document.documentElement.dataset.theme = name;
+  try {
+    localStorage.setItem('vt-theme', name);
+  } catch (e) {
+    // Privater Modus o. ä. – dann gilt die Wahl nur für diese Sitzung.
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute('content', THEMES[name]);
+  }
+  document.querySelectorAll('#theme-toggle .seg-btn').forEach(btn => {
+    const active = btn.dataset.theme === name;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+  const quick = document.getElementById('theme-btn');
+  if (quick) {
+    quick.title = name === 'nacht' ? 'Zu Karteikarte wechseln' : 'Zu Nachtmodus wechseln';
+    quick.setAttribute('aria-label', quick.title);
+  }
+}
+
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme === 'nacht' ? 'karte' : 'nacht');
+}
+
+function setTab(tab) {
+  document.body.dataset.tab = tab;
+  document.querySelectorAll('.bottom-nav .nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  window.scrollTo({ top: 0 });
+}
+
+function updateProgress() {
+  const total = learnMode === 'tenses' ? verbs.length : vocabulary.length;
+  const answered = answeredWords.correct.length + answeredWords.incorrect.length;
+  const ok = answeredWords.correct.length;
+  const bad = answeredWords.incorrect.length;
+  const rest = Math.max(total - answered, 0);
+
+  document.getElementById('progress-ok').style.flexGrow = ok;
+  document.getElementById('progress-bad').style.flexGrow = bad;
+  document.getElementById('progress-rest').style.flexGrow = total > 0 ? rest : 1;
+  document.getElementById('progress-count').textContent = `${Math.min(answered, total)} / ${total}`;
+  document.getElementById('progress-accuracy').textContent = totalCount > 0
+    ? `${Math.round((correctCount / totalCount) * 100)} % richtig`
+    : '–';
 }
 
 function syncModeUI() {
@@ -197,18 +295,16 @@ function rebuildVerbQueue() {
   verbQueue = shuffle(verbs.map(verb => ({ ...verb, target: verbTarget })));
 }
 
-async function loadVerbs() {
+// keepQueue: eine wiederhergestellte Warteschlange nicht durch eine neu gemischte ersetzen.
+async function loadVerbs({ keepQueue = false } = {}) {
   try {
-    const response = await fetch('/api/verbs');
-    const data = await response.json();
-    if (!data.success || !Array.isArray(data.verbs)) {
-      throw new Error('Keine Verben geladen.');
-    }
-
-    verbs = data.verbs;
+    verbs = await store.getVerbs();
     document.getElementById('total-words').textContent = verbs.length;
-    rebuildVerbQueue();
+    if (!keepQueue || verbQueue.length === 0) {
+      rebuildVerbQueue();
+    }
     renderUpcomingWords();
+    updateProgress();
 
     if (verbs.length === 0) {
       document.getElementById('english-word').textContent = 'Keine Verben verfügbar';
@@ -224,7 +320,6 @@ async function loadVerbs() {
 }
 
 function resetVerbRound() {
-  quizFinished = false;
   currentVerb = null;
   lastVerbWrongAnswer = '';
   correctCount = 0;
@@ -235,15 +330,14 @@ function resetVerbRound() {
   document.getElementById('german-input').disabled = false;
   document.getElementById('result').textContent = 'Runde zurückgesetzt. Lade Verben...';
   document.getElementById('result').className = 'hint';
-  document.getElementById('next-btn').classList.add('hidden');
+  setAnswered(false);
   resetAiPanel();
   loadVerbs();
 }
 
 async function loadDatasets() {
   try {
-    const response = await fetch('/api/datasets');
-    const data = await response.json();
+    const data = await store.listDatasets();
     const select = document.getElementById('dataset-select');
     select.innerHTML = '';
 
@@ -264,9 +358,18 @@ async function loadDatasets() {
     });
 
     selectedDataset = data.defaultDataset || data.datasets[0].name;
+    updateDatasetLabel();
     return data;
   } catch (error) {
     console.error('Fehler beim Laden der Datensätze:', error);
+  }
+}
+
+// Name des aktiven Datasets im „Listen“-Tab anzeigen (dort gibt es keine Auswahlbox).
+function updateDatasetLabel() {
+  const label = document.getElementById('current-dataset-label');
+  if (label) {
+    label.textContent = selectedDataset ? selectedDataset.replace(/\.(csv|xlsx)$/i, '') : '–';
   }
 }
 
@@ -282,14 +385,8 @@ async function createDataset() {
   }
 
   try {
-    const response = await fetch('/api/datasets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
-    });
-
-    const data = await response.json();
-    if (!response.ok && response.status !== 409) {
+    const data = await store.createDataset(name);
+    if (!data.success) {
       resultDiv.textContent = data.message || 'Fehler beim Erstellen des Datasets.';
       resultDiv.className = 'incorrect';
       return;
@@ -300,7 +397,7 @@ async function createDataset() {
     document.getElementById('dataset-select').value = selectedDataset;
     await loadVocabulary(selectedDataset);
 
-    resultDiv.textContent = response.status === 409 ?
+    resultDiv.textContent = data.exists ?
       `Dataset existiert bereits: ${selectedDataset}` :
       `Dataset erstellt: ${selectedDataset}`;
     resultDiv.className = 'correct';
@@ -330,14 +427,8 @@ async function renameDataset() {
   }
 
   try {
-    const response = await fetch('/api/datasets/rename', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldName: selectedDataset, newName: name })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
+    const data = await store.renameDataset(selectedDataset, name);
+    if (!data.success) {
       resultDiv.textContent = data.message || 'Fehler beim Umbenennen des Datasets.';
       resultDiv.className = 'incorrect';
       return;
@@ -373,14 +464,8 @@ async function deleteDataset() {
   }
 
   try {
-    const response = await fetch('/api/datasets/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: selectedDataset })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
+    const data = await store.deleteDataset(selectedDataset);
+    if (!data.success) {
       resultDiv.textContent = data.message || 'Fehler beim Löschen des Datasets.';
       resultDiv.className = 'incorrect';
       return;
@@ -409,6 +494,12 @@ async function deleteDataset() {
   }
 }
 
+// Vokabeln eines Datasets holen, ohne die laufende Runde anzufassen.
+async function fetchVocabulary(dataset) {
+  vocabulary = await store.getVocabulary(dataset);
+  document.getElementById('total-words').textContent = vocabulary.length;
+}
+
 async function loadVocabulary(dataset = selectedDataset) {
   if (!dataset) {
     await loadDatasets();
@@ -416,13 +507,7 @@ async function loadVocabulary(dataset = selectedDataset) {
   }
 
   try {
-    const response = await fetch(`/api/vocabulary?dataset=${encodeURIComponent(dataset)}`);
-    if (!response.ok) {
-      throw new Error('Dataset konnte nicht geladen werden.');
-    }
-
-    vocabulary = await response.json();
-    document.getElementById('total-words').textContent = vocabulary.length;
+    await fetchVocabulary(dataset);
     updateStats();
     rebuildQueue();
     renderUpcomingWords();
@@ -448,6 +533,7 @@ function updateStats() {
   document.getElementById('total-count').textContent = totalCount;
 
   updateWordLists();
+  updateProgress();
 }
 
 function updateWordLists() {
@@ -511,16 +597,21 @@ function renderUpcomingWords() {
     return;
   }
 
+  // Kompakte Chips: „Als nächstes“ – ohne die Antwort zu verraten.
   nextWords.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'upcoming-item';
     if (item.infinitive) {
       const itemTarget = item.target || verbTarget;
-      const itemLabel = itemTarget === 'all' ? 'alle 3 Formen' : (verbTargetLabels[itemTarget] || itemTarget);
-      row.textContent = `${index + 1}. ${item.infinitive} → ${itemLabel}`;
+      row.textContent = itemTarget === 'all' || itemTarget === 'infinitive'
+        ? item.german
+        : item.infinitive;
     } else {
       const config = getDirectionConfig();
-      row.textContent = `${index + 1}. ${item[config.questionKey]}`;
+      row.textContent = item[config.questionKey];
+    }
+    if (index === 0) {
+      row.textContent = `Danach: ${row.textContent}`;
     }
     list.appendChild(row);
   });
@@ -540,14 +631,8 @@ async function addNewWord() {
   }
 
   try {
-    const response = await fetch('/api/add-word', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ english, german, dataset: selectedDataset })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
+    const data = await store.addWord(selectedDataset, english, german);
+    if (!data.success) {
       resultDiv.textContent = data.message || 'Fehler beim Hinzufügen.';
       resultDiv.className = 'incorrect';
       return;
@@ -575,7 +660,6 @@ function resetQuiz(dataset = selectedDataset) {
     selectedDataset = dataset;
   }
 
-  quizFinished = false;
   wordQueue = [];
   currentWord = null;
   correctCount = 0;
@@ -586,18 +670,21 @@ function resetQuiz(dataset = selectedDataset) {
   document.getElementById('german-input').disabled = false;
   document.getElementById('result').textContent = 'Quiz zurückgesetzt. Lade neue Vokabel...';
   document.getElementById('result').className = 'hint';
-  document.getElementById('next-btn').classList.add('hidden');
+  setAnswered(false);
   resetAiPanel();
   loadVocabulary(selectedDataset);
 }
 
 async function finishQuiz() {
-  if (!confirm('Möchtest du die Anwendung wirklich beenden? Dein Lernstand wird gespeichert und beim nächsten Start wieder geladen.')) {
+  const question = store.canExit
+    ? 'Möchtest du die Anwendung wirklich beenden? Dein Lernstand wird gespeichert und beim nächsten Start wieder geladen.'
+    : 'Lernstand jetzt speichern? Er wird beim nächsten Start der App wieder geladen.';
+  if (!confirm(question)) {
     return;
   }
 
   const resultDiv = document.getElementById('result');
-  resultDiv.textContent = 'Speichere Lernstand und beende die Anwendung...';
+  resultDiv.textContent = store.canExit ? 'Speichere Lernstand und beende die Anwendung...' : 'Speichere Lernstand...';
   resultDiv.className = 'hint';
   document.getElementById('finish-btn').disabled = true;
 
@@ -612,38 +699,25 @@ async function finishQuiz() {
     wordQueue: learnMode === 'tenses' ? verbQueue : wordQueue
   };
 
-  let saved = false;
-  let serverMessage = '';
+  let outcome;
   try {
-    const response = await fetch('/api/finish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
-    });
-    const text = await response.text();
-    let data = null;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null; // z.B. 404-HTML-Seite statt JSON
-    }
-    saved = response.ok && !!data && data.success === true;
-    if (response.status === 404) {
-      serverMessage = 'Der Server kennt die Enden-Funktion nicht. Bitte Anwendung neu starten (npm start bzw. node server.js), damit die neue Server-Version läuft.';
-    } else if (data && data.message) {
-      serverMessage = data.message;
-    }
-    if (!saved && !serverMessage) {
-      serverMessage = `Server-Antwort: HTTP ${response.status}`;
-    }
+    outcome = await store.saveState(state);
   } catch (error) {
-    console.error('Fehler beim Beenden der Anwendung:', error);
-    serverMessage = 'Der Server ist nicht erreichbar. Läuft die Anwendung (npm start bzw. node server.js)?';
+    console.error('Fehler beim Speichern des Lernstands:', error);
+    outcome = { success: false, message: error.message };
   }
 
-  if (!saved) {
-    resultDiv.textContent = `Fehler: Der Lernstand konnte nicht gespeichert werden. ${serverMessage}`;
+  if (!outcome.success) {
+    resultDiv.textContent = `Fehler: Der Lernstand konnte nicht gespeichert werden. ${outcome.message || ''}`;
     resultDiv.className = 'incorrect';
+    document.getElementById('finish-btn').disabled = false;
+    return;
+  }
+
+  // Lokaler Modus (App): nur speichern, weiterlernen.
+  if (!store.canExit) {
+    resultDiv.textContent = 'Lernstand gespeichert – du kannst weiterlernen oder die App schließen.';
+    resultDiv.className = 'correct';
     document.getElementById('finish-btn').disabled = false;
     return;
   }
@@ -652,7 +726,7 @@ async function finishQuiz() {
 
   // Fenster schließen (wirkt nur, wenn die Seite per Skript geöffnet wurde).
   window.close();
-  // Fallback: saubere „Beendet"-Anzeige, damit klar ist, dass die App sich geschlossen hat.
+  // Fallback: saubere Beendet-Anzeige, damit klar ist, dass die App sich geschlossen hat.
   showShutdownScreen(accuracy);
 }
 
@@ -664,25 +738,29 @@ function showShutdownScreen(accuracy) {
 
   let summary = '';
   if (totalCount > 0) {
-    summary = `<p>📊 Letzter Stand: ${correctCount} richtig, ${incorrectCount} falsch von ${totalCount} Versuchen (${accuracy} %).</p>`;
+    summary = `<p>Letzter Stand: ${correctCount} richtig, ${incorrectCount} falsch von ${totalCount} Versuchen (${accuracy} %).</p>`;
   }
 
   container.innerHTML = `
-    <h1>🏁 Vokabeltrainer wurde beendet</h1>
-    <p>Dein Lernstand wurde gespeichert und wird beim nächsten Start automatisch geladen.</p>
-    ${summary}
-    <p class="hint" style="margin-top:1.5rem;">Du kannst dieses Fenster jetzt schließen.</p>`;
+    <div class="shutdown">
+      <h1>Vokabeltrainer wurde beendet</h1>
+      <p>Dein Lernstand wurde gespeichert und wird beim nächsten Start automatisch geladen.</p>
+      ${summary}
+      <p>Du kannst dieses Fenster jetzt schließen.</p>
+    </div>`;
+  const nav = document.querySelector('.bottom-nav');
+  if (nav) {
+    nav.remove();
+  }
 }
 
 async function restoreLastState() {
   try {
-    const response = await fetch('/api/state');
-    const data = await response.json();
-    if (!data || !data.hasState || !data.state) {
+    const saved = await store.loadState();
+    if (!saved) {
       return;
     }
 
-    const saved = data.state;
     const select = document.getElementById('dataset-select');
 
     // Zeitformen-Modus: Verben-Runde wiederherstellen (Dataset ist hier nicht relevant).
@@ -703,10 +781,11 @@ async function restoreLastState() {
       currentVerb = null;
 
       updateStats();
+      await loadVerbs({ keepQueue: true });
+      // Hinweis erst nach loadVerbs setzen – showNextVerb überschreibt die Ergebniszeile.
       const resultDiv = document.getElementById('result');
       resultDiv.textContent = '🔄 Letzter Lernstand wiederhergestellt – die Verben-Runde kann fortgesetzt werden.';
       resultDiv.className = 'hint';
-      loadVerbs();
       return;
     }
 
@@ -720,6 +799,11 @@ async function restoreLastState() {
     learningDirection = (saved.direction === 'en-de' || saved.direction === 'de-en') ? saved.direction : 'de-en';
     document.getElementById('direction-select').value = learningDirection;
     updateAnswerInput();
+
+    // Das gespeicherte Dataset kann vom Server-Standard abweichen – Vokabeln
+    // dazu laden, sonst füllt rebuildQueue() später Wörter des falschen Datasets nach.
+    await fetchVocabulary(saved.dataset);
+    rebuildQueue();
 
     correctCount = Number(saved.correctCount) || 0;
     incorrectCount = Number(saved.incorrectCount) || 0;
@@ -742,10 +826,11 @@ async function restoreLastState() {
     currentWord = null;
 
     updateStats();
+    showNextWord();
+    // Hinweis erst nach showNextWord setzen – das überschreibt sonst die Ergebniszeile.
     const resultDiv = document.getElementById('result');
     resultDiv.textContent = '🔄 Letzter Lernstand wiederhergestellt – die Runde kann fortgesetzt werden.';
     resultDiv.className = 'hint';
-    showNextWord();
   } catch (error) {
     console.error('Fehler beim Wiederherstellen des letzten Standes:', error);
   }
@@ -784,8 +869,7 @@ function showNextWord() {
   document.getElementById('german-input').value = '';
   updateAnswerInput();
   document.getElementById('german-input').focus();
-  document.getElementById('check-btn').disabled = false;
-  document.getElementById('next-btn').classList.add('hidden');
+  setAnswered(false);
   renderUpcomingWords();
   resetAiPanel();
 }
@@ -813,34 +897,15 @@ function showNextVerb() {
   document.getElementById('german-input').value = '';
   updateModeUI();
   document.getElementById('german-input').focus();
-  document.getElementById('check-btn').disabled = false;
-  document.getElementById('next-btn').classList.add('hidden');
+  setAnswered(false);
   renderUpcomingWords();
   resetAiPanel();
-}
-
-function renderCurrentVerb() {
-  if (!currentVerb) {
-    return;
-  }
-  document.getElementById('english-word').textContent = renderVerbQuestionText(currentVerb);
-  lastVerbWrongAnswer = '';
-  document.getElementById('german-input').value = '';
-  document.getElementById('check-btn').disabled = false;
-  document.getElementById('next-btn').classList.add('hidden');
-  updateAiButtonLabel();
 }
 
 async function checkVerbAnswer(autoNext = false) {
   const resultDiv = document.getElementById('result');
   const verb = (currentVerb && currentVerb.infinitive) || document.getElementById('english-word').textContent.trim();
   const answer = document.getElementById('german-input').value.trim();
-
-  if (quizFinished) {
-    resultDiv.textContent = 'Das Quiz wurde beendet. Klicke auf „Neu starten“, um zu lernen.';
-    resultDiv.className = 'hint';
-    return;
-  }
 
   if (!answer) {
     resultDiv.textContent = 'Bitte gib eine Antwort ein.';
@@ -849,13 +914,7 @@ async function checkVerbAnswer(autoNext = false) {
   }
 
   try {
-    const response = await fetch('/api/verb-check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verb, target: activeVerbTarget(), answer })
-    });
-
-    const data = await response.json();
+    const data = await store.checkVerb(verb, activeVerbTarget(), answer);
     if (!data.success) {
       resultDiv.textContent = data.message || 'Fehler beim Prüfen des Verbs.';
       resultDiv.className = 'incorrect';
@@ -864,19 +923,25 @@ async function checkVerbAnswer(autoNext = false) {
 
     totalCount++;
 
+    const verbForms = data.verb
+      ? [data.verb.infinitive, data.verb.past, data.verb.participle]
+      : (data.expected || '').split(' · ');
+
     if (data.correct) {
       correctCount++;
       lastVerbWrongAnswer = '';
-      resultDiv.textContent = '✅ Richtig!';
-      resultDiv.className = 'correct';
+      showResult('correct', 'Richtig', '', verbForms);
       if (currentVerb && !answeredWords.correct.some(v => v.infinitive === currentVerb.infinitive)) {
         answeredWords.correct.push(currentVerb);
       }
     } else {
       incorrectCount++;
       lastVerbWrongAnswer = answer;
-      resultDiv.textContent = `❌ Falsch! Richtig: ${data.expected} – Klicke unten auf „Fehler erklären“ für eine Eselsbrücke vom KI-Coach.`;
-      resultDiv.className = 'incorrect';
+      showResult('incorrect', 'Nicht ganz',
+        activeVerbTarget() === 'all'
+          ? 'Richtig ist – tippe unten auf „Fehler erklären“ für eine Eselsbrücke:'
+          : `Richtig: <strong>${escapeHtml(data.expected)}</strong>`,
+        activeVerbTarget() === 'all' ? verbForms : []);
       // Die fehlerhafte Frage (Verb + Ziel-Form) kommt am Ende der Runde noch einmal dran –
       // aber nur, falls sie nicht bereits als eigene Frage in der Warteschlange steht.
       if (currentVerb && !verbQueue.some(v => v.infinitive === currentVerb.infinitive && v.target === activeVerbTarget())) {
@@ -889,8 +954,7 @@ async function checkVerbAnswer(autoNext = false) {
 
     updateStats();
     updateAiButtonLabel();
-    document.getElementById('check-btn').disabled = true;
-    document.getElementById('next-btn').classList.remove('hidden');
+    setAnswered(true);
 
     // Nur bei richtiger Antwort automatisch weiter (Enter-Tastatur-Flow).
     // Bei falscher Antwort bleibt die Seite stehen – Zeit zum Lesen,
@@ -917,12 +981,6 @@ async function checkAnswer(autoNext = false) {
   const answer = document.getElementById('german-input').value.trim();
   const resultDiv = document.getElementById('result');
 
-  if (quizFinished) {
-    resultDiv.textContent = 'Das Quiz wurde beendet. Klicke auf „Neu starten", um zu lernen.';
-    resultDiv.className = 'hint';
-    return;
-  }
-
   if (!answer) {
     resultDiv.textContent = 'Bitte gib eine Antwort ein.';
     resultDiv.className = 'hint';
@@ -930,28 +988,18 @@ async function checkAnswer(autoNext = false) {
   }
 
   try {
-    const response = await fetch('/api/check', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ question, answer, direction: learningDirection, dataset: selectedDataset }),
-    });
-
-    const data = await response.json();
+    const data = await store.checkWord(selectedDataset, question, answer, learningDirection);
     totalCount++;
 
     if (data.correct) {
       correctCount++;
-      resultDiv.textContent = '✅ Richtig!';
-      resultDiv.className = 'correct';
+      showResult('correct', 'Richtig', escapeHtml(data.correctAnswer));
       if (currentWord && !answeredWords.correct.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
         answeredWords.correct.push(currentWord);
       }
     } else {
       incorrectCount++;
-      resultDiv.textContent = `❌ Falsch! Richtige Antwort: ${data.correctAnswer}`;
-      resultDiv.className = 'incorrect';
+      showResult('incorrect', 'Nicht ganz', `Richtig: <strong>${escapeHtml(data.correctAnswer)}</strong>`);
       // Wort kommt am Ende der Runde noch einmal dran, blockiert aber nicht die nächsten Wörter.
       if (currentWord && !wordQueue.some(v => v.english === currentWord.english && v.german === currentWord.german)) {
         wordQueue.push(currentWord);
@@ -962,8 +1010,7 @@ async function checkAnswer(autoNext = false) {
     }
 
     updateStats();
-    document.getElementById('check-btn').disabled = true;
-    document.getElementById('next-btn').classList.remove('hidden');
+    setAnswered(true);
 
     // Nur bei richtiger Antwort automatisch weiter (Enter-Tastatur-Flow).
     // Bei falscher Antwort bleibt die Seite stehen – Zeit zum Lesen,
@@ -1007,18 +1054,12 @@ async function fetchAiHelper() {
   resultDiv.classList.remove('ai-error');
 
   try {
-    const response = await fetch('/api/ai-helper', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(learnMode === 'tenses'
-        ? { verb: currentVerb, target: activeVerbTarget(), userAnswer: lastVerbWrongAnswer }
-        : { word })
-    });
-
-    const data = await response.json();
+    const data = await store.aiHelp(learnMode === 'tenses'
+      ? { verb: currentVerb, target: activeVerbTarget(), userAnswer: lastVerbWrongAnswer }
+      : { word });
 
     if (data.success) {
-      resultDiv.textContent = data.info;
+      resultDiv.innerHTML = renderMarkdown(data.info);
       resultDiv.classList.remove('hidden');
     } else {
       resultDiv.textContent = data.message || 'Fehler bei der KI-Anfrage.';
@@ -1037,6 +1078,56 @@ async function fetchAiHelper() {
   }
 }
 
+// Minimaler Markdown-Renderer für die KI-Antwort: erst HTML escapen, dann
+// nur Fett, Kursiv, Inline-Code, Listen und Absätze umsetzen.
+function renderMarkdown(text) {
+  const escaped = (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const inline = line => line
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+
+  const html = [];
+  let listTag = null;
+  const closeList = () => {
+    if (listTag) {
+      html.push(`</${listTag}>`);
+      listTag = null;
+    }
+  };
+
+  for (const rawLine of escaped.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const bullet = line.match(/^[-*•]\s+(.*)$/);
+    const numbered = line.match(/^\d+[.)]\s+(.*)$/);
+    const heading = line.match(/^#{1,6}\s+(.*)$/);
+
+    if (bullet || numbered) {
+      const tag = bullet ? 'ul' : 'ol';
+      if (listTag !== tag) {
+        closeList();
+        html.push(`<${tag}>`);
+        listTag = tag;
+      }
+      html.push(`<li>${inline((bullet || numbered)[1])}</li>`);
+    } else if (!line) {
+      closeList();
+    } else if (heading) {
+      closeList();
+      html.push(`<p><strong>${inline(heading[1])}</strong></p>`);
+    } else {
+      closeList();
+      html.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  closeList();
+  return `<div class="markdown-body">${html.join('')}</div>`;
+}
+
 function resetAiPanel() {
   const resultDiv = document.getElementById('ai-result');
   if (resultDiv) {
@@ -1046,7 +1137,89 @@ function resetAiPanel() {
   }
 }
 
+// ── Lokaler Modus: Import/Export & KI-Server-Adresse ───────────────────────
+async function importCsvFile(file) {
+  const resultDiv = document.getElementById('result');
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    const data = await store.importCsv(file.name, text);
+    if (!data.success) {
+      resultDiv.textContent = data.message || 'Import fehlgeschlagen.';
+      resultDiv.className = 'incorrect';
+      return;
+    }
+    await loadDatasets();
+    selectedDataset = data.dataset;
+    document.getElementById('dataset-select').value = selectedDataset;
+    updateDatasetLabel();
+    await loadVocabulary(selectedDataset);
+    resultDiv.textContent = `Importiert: ${data.count} Vokabeln in „${VTCore.datasetLabel(data.dataset)}“.`;
+    resultDiv.className = 'correct';
+  } catch (error) {
+    console.error('Import fehlgeschlagen:', error);
+    resultDiv.textContent = 'Import fehlgeschlagen. Ist es eine CSV-Datei mit den Spalten English, German?';
+    resultDiv.className = 'incorrect';
+  }
+}
+
+async function exportCurrentDataset() {
+  const resultDiv = document.getElementById('result');
+  if (!selectedDataset) {
+    resultDiv.textContent = 'Bitte wähle zuerst ein Dataset aus.';
+    resultDiv.className = 'hint';
+    return;
+  }
+  try {
+    const data = await store.exportCsv(selectedDataset);
+    resultDiv.textContent = data.shared ? 'Dataset zum Teilen bereitgestellt.' : 'Dataset als CSV heruntergeladen.';
+    resultDiv.className = 'correct';
+  } catch (error) {
+    console.error('Export fehlgeschlagen:', error);
+    resultDiv.textContent = 'Export fehlgeschlagen.';
+    resultDiv.className = 'incorrect';
+  }
+}
+
+async function setupLocalModeUI() {
+  const isLocal = store.kind === 'local';
+  document.querySelectorAll('.local-only').forEach(el => el.classList.toggle('hidden', !isLocal));
+  document.getElementById('finish-btn').textContent = store.canExit ? 'Speichern & Beenden' : 'Lernstand speichern';
+  if (!isLocal) {
+    return;
+  }
+
+  const settings = await store.getSettings();
+  const urlInput = document.getElementById('ai-proxy-url');
+  urlInput.value = settings.aiProxyUrl || '';
+  document.getElementById('ai-proxy-save-btn').addEventListener('click', async () => {
+    await store.saveSettings({ aiProxyUrl: urlInput.value.trim() });
+    const resultDiv = document.getElementById('result');
+    resultDiv.textContent = urlInput.value.trim() ? 'KI-Server gespeichert.' : 'KI-Server entfernt.';
+    resultDiv.className = 'correct';
+  });
+
+  const fileInput = document.getElementById('import-csv-file');
+  document.getElementById('import-csv-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    await importCsvFile(fileInput.files && fileInput.files[0]);
+    fileInput.value = '';
+  });
+  document.getElementById('export-csv-btn').addEventListener('click', exportCurrentDataset);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  applyTheme(document.documentElement.dataset.theme || 'nacht');
+  store = VTStorage.createStore();
+  await store.init();
+  await setupLocalModeUI();
+  document.getElementById('theme-btn').addEventListener('click', toggleTheme);
+  document.querySelectorAll('#theme-toggle .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+
   await loadDatasets();
   updateAnswerInput();
   await loadVocabulary();
@@ -1054,7 +1227,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('dataset-select').addEventListener('change', async (event) => {
     selectedDataset = event.target.value;
+    updateDatasetLabel();
     resetQuiz(selectedDataset);
+  });
+
+  document.querySelectorAll('.bottom-nav .nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => setTab(btn.dataset.tab));
   });
 
   document.getElementById('direction-select').addEventListener('change', (event) => {
@@ -1085,14 +1263,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('finish-btn').addEventListener('click', finishQuiz);
   document.getElementById('add-word-btn').addEventListener('click', addNewWord);
 
-  document.getElementById('german-input').addEventListener('keypress', (e) => {
+  document.getElementById('german-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       checkAnswer(true);
     }
   });
 
-  document.getElementById('new-german').addEventListener('keypress', (e) => {
+  document.getElementById('new-german').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       addNewWord();

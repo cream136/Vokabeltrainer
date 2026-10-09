@@ -4,12 +4,44 @@
  */
 const { app, BrowserWindow, shell } = require('electron');
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
 let serverProcess = null;
+let shuttingDown = false;
 const PORT = process.env.PORT || 3000;
 const SERVER_URL = `http://localhost:${PORT}`;
+
+// ── Datenverzeichnis ─────────────────────────────────────────────────────────
+// In der gepackten App ist app.asar schreibgeschützt, deshalb liegen Datasets,
+// Lernstand und .env dann im userData-Ordner (Windows: %APPDATA%\Vokabeltrainer\data).
+// Beim ersten Start werden die mitgelieferten CSVs und die Verbliste dorthin kopiert.
+// In der Entwicklung (npm run electron) bleibt alles im Projektordner wie bei npm start.
+function prepareDataDir() {
+  if (!app.isPackaged) {
+    return __dirname;
+  }
+  const dataDir = path.join(app.getPath('userData'), 'data');
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  // Verbliste liegt in public/ und wird vom Server von dort gelesen – muss nicht kopiert werden.
+  const seedFiles = fs.readdirSync(__dirname)
+    .filter(file => /\.(csv|xlsx)$/i.test(file) || file === '.env');
+
+  for (const file of seedFiles) {
+    const target = path.join(dataDir, file);
+    if (!fs.existsSync(target)) {
+      try {
+        fs.copyFileSync(path.join(__dirname, file), target);
+      } catch (err) {
+        console.error(`Konnte ${file} nicht ins Datenverzeichnis kopieren:`, err.message);
+      }
+    }
+  }
+
+  return dataDir;
+}
 
 // ── HTTP-Helper ──────────────────────────────────────────────────────────────
 function httpGet(url) {
@@ -37,12 +69,21 @@ async function waitForServer(url, timeoutMs = 10000) {
 }
 
 // ── Server-Start ─────────────────────────────────────────────────────────────
-function startServer() {
+function startServer(dataDir) {
   return new Promise((resolve) => {
     const serverPath = path.join(__dirname, 'server.js');
 
+    // ELECTRON_RUN_AS_NODE: process.execPath ist in der gepackten App die
+    // Vokabeltrainer.exe selbst – ohne dieses Flag würde sie als zweite
+    // Electron-Instanz starten (und wieder einen Server spawnen, endlos).
     serverProcess = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, PORT: String(PORT) },
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        PORT: String(PORT),
+        VOKABEL_DATA_DIR: dataDir
+      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -62,8 +103,14 @@ function startServer() {
     });
 
     serverProcess.on('exit', (code) => {
+      serverProcess = null;
       if (code !== null && code !== 0) {
         console.error(`Server-Prozess beendet mit Code ${code}`);
+      }
+      // „Beenden“ in der App fährt den Server herunter → App mit schließen.
+      if (!shuttingDown) {
+        shuttingDown = true;
+        app.quit();
       }
     });
 
@@ -123,6 +170,7 @@ function createWindow() {
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 function cleanup() {
+  shuttingDown = true;
   if (serverProcess) {
     try { serverProcess.kill('SIGTERM'); } catch { /* ignore */ }
     serverProcess = null;
@@ -130,7 +178,9 @@ function cleanup() {
 }
 
 app.whenReady().then(async () => {
-  await startServer();
+  const dataDir = prepareDataDir();
+  console.log(`Datenverzeichnis: ${dataDir}`);
+  await startServer(dataDir);
   createWindow();
 
   app.on('activate', () => {

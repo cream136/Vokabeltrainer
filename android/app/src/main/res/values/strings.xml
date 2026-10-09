@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vokabeltrainer</string>
+    <string name="title_activity_main">Vokabeltrainer</string>
+    <string name="package_name">de.vokabeltrainer.app</string>
+    <string name="custom_url_scheme">de.vokabeltrainer.app</string>
+</resources>

@@ -1,161 +1,222 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#2563eb">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Vokabeltrainer">
-  <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png">
-  <title>Vokabeltrainer</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0E1013">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vokabeltrainer">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-192.png">
+    <title>Vokabeltrainer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="style.css">
+    <script>
+        // Gespeichertes Design vor dem ersten Rendern setzen (kein Aufblitzen des falschen Themes).
+        try { document.documentElement.dataset.theme = localStorage.getItem('vt-theme') || 'nacht'; } catch (e) { document.documentElement.dataset.theme = 'nacht'; }
+    </script>
 </head>
-<body>
-  <div class="container">
-    <!-- ══ Seitenleiste: Verwaltung, Wörter, Statistik ══════════════════════ -->
-    <aside class="sidebar">
-      <h1>Vokabeltrainer</h1>
+<body data-tab="lernen">
+    <div class="container">
+        <!-- ══ Seitenleiste (Desktop) / Tabs „Listen“ & „Statistik“ (Mobil) ══════ -->
+        <aside class="sidebar">
+            <section class="side-section" id="dataset-section">
+                <h2>Dataset</h2>
+                <p class="side-note">Aktuell: <strong id="current-dataset-label">–</strong></p>
+                <div class="ds-row">
+                    <input id="dataset-name" type="text" placeholder="Neues Dataset" autocomplete="off">
+                    <button id="create-dataset-btn" class="secondary">Erstellen</button>
+                </div>
+                <div class="ds-row">
+                    <input id="dataset-rename" type="text" placeholder="Neuer Name" autocomplete="off">
+                    <button id="rename-dataset-btn" class="secondary">Umbenennen</button>
+                </div>
+                <button id="delete-dataset-btn" class="danger ghost">Aktuelles Dataset löschen</button>
+                <div class="ds-row local-only hidden">
+                    <button id="import-csv-btn" class="secondary">CSV importieren</button>
+                    <button id="export-csv-btn" class="secondary">CSV exportieren</button>
+                    <input type="file" id="import-csv-file" accept=".csv,text/csv" class="hidden">
+                </div>
+            </section>
 
-      <section class="side-section hidden" id="tenses-section">
-        <h2>Zeitformen</h2>
-        <p class="tenses-desc">Frage: <strong>Deutsches Wort</strong><br>Antwort: <strong>alle 3 Formen</strong> (Infinitiv, Past, Partizip)</p>
-      </section>
+            <section class="side-section" id="addword-section">
+                <h2>Wort hinzufügen</h2>
+                <div class="add-col">
+                    <input type="text" id="new-english" placeholder="English" autocomplete="off">
+                    <input type="text" id="new-german" placeholder="Deutsch" autocomplete="off">
+                    <button id="add-word-btn" class="secondary">Hinzufügen</button>
+                </div>
+            </section>
 
-      <section class="side-section" id="dataset-section">
-        <h2>Dataset</h2>
-        <div class="dataset-box">
-          <div class="ds-row">
-            <label for="dataset-name">Neu</label>
-            <input id="dataset-name" type="text" placeholder="Name" autocomplete="off">
-            <button id="create-dataset-btn">Erstellen</button>
-          </div>
-          <div class="ds-row">
-            <label for="dataset-rename">Umbenennen</label>
-            <input id="dataset-rename" type="text" placeholder="Neuer Name" autocomplete="off">
-            <button id="rename-dataset-btn">Umbenennen</button>
-          </div>
-          <button id="delete-dataset-btn" class="danger">Aktuelles Dataset löschen</button>
-        </div>
-      </section>
+            <section class="side-section" id="tenses-section">
+                <h2>Zeitformen</h2>
+                <p class="side-note">Frage: <strong>deutsches Wort</strong> · Antwort: <strong>alle 3 Formen</strong> (Infinitiv, Simple Past, Past Participle). 153 unregelmäßige Verben, Klassen 6–12.</p>
+            </section>
 
-      <section class="side-section" id="addword-section">
-        <h2>Wort hinzufügen</h2>
-        <p class="side-note">Englisches Wort + deutsche Übersetzung.</p>
-        <div class="add-col">
-          <input type="text" id="new-english" placeholder="English" autocomplete="off">
-          <input type="text" id="new-german" placeholder="German" autocomplete="off">
-          <button id="add-word-btn">Hinzufügen</button>
-        </div>
-      </section>
+            <section class="side-section" id="settings-section">
+                <h2>Einstellungen</h2>
+                <div class="setting-row">
+                    <span class="field-label">Design</span>
+                    <div class="seg" id="theme-toggle" role="radiogroup" aria-label="Design">
+                        <button type="button" class="seg-btn" data-theme="nacht" role="radio">Nachtmodus</button>
+                        <button type="button" class="seg-btn" data-theme="karte" role="radio">Karteikarte</button>
+                    </div>
+                    <p class="setting-hint">Wird auf diesem Gerät gespeichert.</p>
+                </div>
+                <div class="setting-row local-only hidden">
+                    <label class="field-label" for="ai-proxy-url">KI-Server</label>
+                    <div class="ds-row">
+                        <input type="url" id="ai-proxy-url" placeholder="http://192.168.1.10:3000" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
+                        <button id="ai-proxy-save-btn" class="secondary">Speichern</button>
+                    </div>
+                    <p class="setting-hint">Adresse des Rechners, auf dem der Vokabeltrainer-Server läuft (<code>npm start</code>). Nur die KI-Hilfe braucht ihn – Vokabeln und Lernstand liegen auf diesem Gerät.</p>
+                </div>
+            </section>
 
-      <section class="side-section" id="stats-section">
-        <h2>Statistik</h2>
-        <div class="stats-grid">
-          <div class="stat-card">
-            <span>Richtig</span>
-            <strong id="correct-count">0</strong>
-            <div class="word-list" id="correct-words"></div>
-          </div>
-          <div class="stat-card">
-            <span>Falsch</span>
-            <strong id="incorrect-count">0</strong>
-            <div class="word-list" id="incorrect-words"></div>
-          </div>
-          <div class="stat-card">
-            <span>Versuche</span>
-            <strong id="total-count">0</strong>
-          </div>
-          <div class="stat-card">
-            <span id="total-words-label">Wörter gesamt</span>
-            <strong id="total-words">0</strong>
-          </div>
-        </div>
-      </section>
-    </aside>
+            <section class="side-section" id="stats-section">
+                <h2>Statistik</h2>
+                <div class="stats-grid">
+                    <div class="stat-card ok">
+                        <span>Richtig</span>
+                        <strong id="correct-count">0</strong>
+                    </div>
+                    <div class="stat-card bad">
+                        <span>Falsch</span>
+                        <strong id="incorrect-count">0</strong>
+                    </div>
+                    <div class="stat-card">
+                        <span>Versuche</span>
+                        <strong id="total-count">0</strong>
+                    </div>
+                    <div class="stat-card">
+                        <span id="total-words-label">Wörter gesamt</span>
+                        <strong id="total-words">0</strong>
+                    </div>
+                </div>
+                <h3>Richtig beantwortet</h3>
+                <div class="word-list" id="correct-words"></div>
+                <h3>Noch üben</h3>
+                <div class="word-list" id="incorrect-words"></div>
+            </section>
+        </aside>
 
-    <!-- ══ Hauptbereich: Quiz steht oben ═══════════════════════════════════ -->
-    <main class="main">
-      <div class="topbar">
-        <div class="topbar-field">
-          <span class="topbar-field-label">Lernmodus</span>
-          <div class="seg" id="mode-toggle">
-            <button type="button" class="seg-btn active" data-mode="words">Wörter</button>
-            <button type="button" class="seg-btn" data-mode="tenses">Zeitformen</button>
-          </div>
-        </div>
-        <div class="topbar-field" id="dataset-field">
-          <label for="dataset-select">Dataset</label>
-          <select id="dataset-select"></select>
-        </div>
-        <div class="topbar-field" id="direction-field">
-          <label for="direction-select">Lernrichtung</label>
-          <select id="direction-select">
-            <option value="de-en">Deutsch → Englisch</option>
-            <option value="en-de">Englisch → Deutsch</option>
-          </select>
-        </div>
-      </div>
+        <!-- ══ Hauptbereich: Quiz ═══════════════════════════════════════════════ -->
+        <main class="main">
+            <header class="topbar">
+                <div class="brand">Vokabeltrainer</div>
+                <div class="topbar-right">
+                    <div id="direction-banner" class="pill"></div>
+                    <button type="button" id="theme-btn" class="icon-btn small" aria-label="Design wechseln" title="Design wechseln">
+                        <svg class="icon-nacht" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+                        <svg class="icon-karte" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="16" height="12" rx="3"></rect><path d="M7 4h13a1 1 0 0 1 1 1v10"></path></svg>
+                    </button>
+                </div>
+            </header>
 
-      <section class="quiz-card">
-        <div class="quiz-header">
-          <div id="direction-banner" class="direction-banner">Deutsch → Englisch</div>
-          <div id="upcoming-list" class="upcoming-list" title="Bevorstehende Fragen">
-            <div class="upcoming-item">Lädt...</div>
-          </div>
-        </div>
-        <div id="word-container">
-          <div class="word-pair">
-            <div class="input-group">
-              <label for="english-word" class="field-label" id="question-label">Deutsch</label>
-              <span id="english-word" class="question-word">Lädt...</span>
+            <div class="seg" id="mode-toggle" role="tablist" aria-label="Lernmodus">
+                <button type="button" class="seg-btn active" data-mode="words" role="tab">Wörter</button>
+                <button type="button" class="seg-btn" data-mode="tenses" role="tab">Zeitformen</button>
             </div>
-            <div class="input-group">
-              <label for="german-input" class="field-label" id="answer-label">Englisch</label>
-              <input type="text" id="german-input" placeholder="Deutsche Übersetzung" autocomplete="off">
+
+            <div class="topbar-fields">
+                <div class="field" id="dataset-field">
+                    <label for="dataset-select">Dataset</label>
+                    <select id="dataset-select"></select>
+                </div>
+                <div class="field" id="direction-field">
+                    <label for="direction-select">Richtung</label>
+                    <select id="direction-select">
+                        <option value="de-en">Deutsch → Englisch</option>
+                        <option value="en-de">Englisch → Deutsch</option>
+                    </select>
+                </div>
             </div>
-            <button id="check-btn">Prüfen</button>
-          </div>
-          <div id="result"></div>
-        </div>
 
-        <div class="button-row">
-          <button id="next-btn" class="hidden">Nächstes Wort</button>
-          <button id="next-question-btn" class="secondary">Nächste Frage</button>
-          <button id="restart-btn" class="secondary">Neu starten</button>
-          <button id="finish-btn" class="danger">Beenden</button>
-        </div>
-      </section>
+            <div class="progress" aria-hidden="true">
+                <span id="progress-ok"></span>
+                <span id="progress-bad"></span>
+                <span id="progress-rest"></span>
+            </div>
+            <div class="progress-text">
+                <span id="progress-count">0 / 0</span>
+                <span id="progress-accuracy">–</span>
+            </div>
 
-      <!-- KI-Hilfe -->
-      <div id="ai-panel" class="ai-panel">
-        <div class="ai-header">
-          <span class="ai-icon">✨</span>
-          <span class="ai-title">KI-Hilfe</span>
-        </div>
-        <div class="ai-body">
-          <p class="ai-desc">Frage den KI-Assistenten zu Konjugation, Beispielsätzen und Synonymen.</p>
-          <button id="ai-btn" type="button" class="ai-trigger-btn">
-            <span id="ai-btn-label">KI-Info anfragen</span>
-            <span id="ai-spinner" class="ai-spinner hidden"></span>
-          </button>
-          <div id="ai-result" class="ai-result hidden"></div>
-        </div>
-      </div>
+            <section class="quiz">
+                <div class="question-card">
+                    <div class="field-label" id="question-label">Deutsch</div>
+                    <div id="english-word" class="question-word">Lädt...</div>
+                    <div id="upcoming-list" class="upcoming-list" aria-label="Als nächstes"></div>
+                </div>
 
-      <script src="script.js"></script>
-      <script>
+                <label for="german-input" class="field-label answer-label" id="answer-label">Englisch</label>
+                <div class="answer-row">
+                    <input type="text" id="german-input" placeholder="Englische Übersetzung" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+                    <button id="check-btn" class="icon-btn primary" aria-label="Prüfen" title="Prüfen">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+                    </button>
+                </div>
+
+                <div id="result" class="result"></div>
+
+                <div id="ai-result" class="ai-result hidden"></div>
+
+                <div class="button-row">
+                    <button id="ai-btn" type="button" class="secondary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path></svg>
+                        <span id="ai-btn-label">KI-Info</span>
+                        <span id="ai-spinner" class="ai-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                    <button id="next-question-btn" class="secondary">Überspringen</button>
+                    <button id="next-btn" class="primary hidden">Weiter</button>
+                </div>
+                <p class="ai-desc"></p>
+
+                <div class="link-row">
+                    <button id="restart-btn" class="link">Neu starten</button>
+                    <span aria-hidden="true">·</span>
+                    <button id="finish-btn" class="link danger-text">Speichern &amp; Beenden</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ══ Bottom-Navigation (nur Mobil) ═════════════════════════════════════ -->
+    <nav class="bottom-nav" aria-label="Hauptnavigation">
+        <button type="button" class="nav-btn active" data-tab="lernen">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            <span>Lernen</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="listen">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            <span>Listen</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="statistik">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>
+            <span>Statistik</span>
+        </button>
+        <button type="button" class="nav-btn" data-tab="einstellungen">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+            <span>Einstellungen</span>
+        </button>
+    </nav>
+
+    <script src="core.js"></script>
+    <script src="storage.js"></script>
+    <script src="script.js"></script>
+    <script>
         // PWA: Service Worker registrieren (iOS Safari erlaubt SW nur mit HTTPS/localhost – Fehler sind harmlos)
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', function () {
-            navigator.serviceWorker.register('/sw.js')
-              .catch(function (err) { console.warn('Service Worker nicht registriert:', err); });
-          });
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch(function (err) { console.warn('Service Worker nicht registriert:', err); });
+            });
         }
-      </script>
-    </main>
-  </div>
+    </script>
 </body>
 </html>

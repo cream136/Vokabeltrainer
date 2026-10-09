@@ -1,0 +1,15 @@
+{
+  "appId": "de.vokabeltrainer.app",
+  "appName": "Vokabeltrainer",
+  "webDir": "public",
+  "backgroundColor": "#0E1013",
+  "android": {
+    "allowMixedContent": true
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "server": {
+    "cleartext": true
+  }
+}
