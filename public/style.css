@@ -1,7 +1,7 @@
 /* ── Vokabeltrainer – Modernes Design (Designsystem: public/modern.css) ──── */
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --ink: #182230;
   --ink-strong: #101828;
   --ink-soft: #344054;
@@ -115,6 +115,8 @@ button.danger:hover { background: var(--red-dark); box-shadow: 0 6px 16px rgba(2
   margin: 0 0 1rem;
 }
 
+.hidden { display: none !important; }
+
 .side-section { padding: 1rem 0; border-top: 1px solid #edf0f4; }
 .side-section:first-of-type { border-top: none; padding-top: 0; }
 
@@ -153,6 +155,55 @@ button.danger:hover { background: var(--red-dark); box-shadow: 0 6px 16px rgba(2
 }
 
 #delete-dataset-btn { width: 100%; }
+
+/* ── Dataset: kompakte Verwaltung-Box (Neu + Umbenennen zusammen) ────────── */
+.dataset-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.6rem;
+}
+
+.ds-row { display: flex; align-items: center; gap: 0.4rem; }
+
+.ds-row label {
+  flex: 0 0 auto;
+  width: 76px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.ds-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  outline: none;
+  font-size: 0.85rem;
+}
+
+.ds-row input::placeholder { color: #98a2b3; }
+.ds-row input:focus { border-color: var(--primary-ring); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+
+.ds-row button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+#delete-dataset-btn { margin-top: 0.15rem; border-top: 1px solid #edf0f4; padding-top: 0.55rem; min-height: 34px; font-size: 0.8rem; }
+
+/* ── Zeitformen: Erklärung in der Sidebar ─────────────────────────────────── */
+.tenses-desc { margin: 0; font-size: 0.85rem; line-height: 1.6; color: var(--ink-soft); }
+.tenses-desc strong { color: var(--ink); }
 
 .add-col { display: flex; flex-direction: column; gap: 0.5rem; }
 .add-col button { width: 100%; }
@@ -230,6 +281,7 @@ button.danger:hover { background: var(--red-dark); box-shadow: 0 6px 16px rgba(2
   color: var(--ink-soft);
   font-size: 0.9rem;
   outline: none;
+  text-align: center;
 }
 
 .topbar-field select:focus {

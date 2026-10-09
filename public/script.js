@@ -27,7 +27,7 @@ let learnMode = 'words'; // 'words' | 'tenses'
 let verbs = [];
 let verbQueue = [];
 let currentVerb = null;
-let verbTarget = 'all'; // 'all' | 'past' | 'participle' | 'infinitive' | 'meaning' ('all' = alle 3 Formen + Bedeutung pro Verb)
+let verbTarget = 'all'; // 'all' (Standard: Deutsches Wort → alle 3 Formen) | 'past' | 'participle' | 'infinitive' | 'meaning'
 let lastVerbWrongAnswer = '';
 
 const verbTargetLabels = {
@@ -46,15 +46,19 @@ function activeVerbTarget() {
 function getVerbTargetLabel() {
   const target = activeVerbTarget();
   if (target === 'all') {
-    return 'alle 3 Formen + Bedeutung';
+    return 'alle 3 Formen';
   }
   return verbTargetLabels[target] || 'Simple Past';
 }
 
 function renderVerbQuestionText(verb) {
   // Die Antwort darf nicht verraten werden:
-  // „Bedeutung“ → nur die englische Form zeigen, „Infinitiv“ → nur 1. Form + Deutsch (keine englische Grundform).
+  // „all“ → nur das deutsche Wort zeigen, „Bedeutung“ → nur die englische Form,
+  // „Infinitiv“ → nur 1. Form + Deutsch (keine englische Grundform).
   const target = activeVerbTarget();
+  if (target === 'all') {
+    return verb.german;
+  }
   if (target === 'meaning') {
     return verb.infinitive;
   }
@@ -71,11 +75,14 @@ function getDirectionConfig() {
 function updateAnswerInput() {
   const answerInput = document.getElementById('german-input');
   if (learnMode === 'tenses') {
-    answerInput.placeholder = activeVerbTarget() === 'meaning'
-      ? 'Deutsche Bedeutung'
-      : activeVerbTarget() === 'infinitive'
-        ? 'Englische Grundform (Infinitiv)'
-        : 'Englische Form';
+    const target = activeVerbTarget();
+    answerInput.placeholder = target === 'all'
+      ? 'z. B. go, went, gone'
+      : target === 'meaning'
+        ? 'Deutsche Bedeutung'
+        : target === 'infinitive'
+          ? 'Englische Grundform (Infinitiv)'
+          : 'Englische Form';
   } else {
     answerInput.placeholder = getDirectionConfig().answerPlaceholder;
   }
@@ -95,19 +102,21 @@ function updateModeUI() {
   if (learnMode === 'tenses') {
     const target = activeVerbTarget();
     if (target === 'all') {
-      directionBanner.textContent = 'Zeitformen: 1. Form → 2. Form → Infinitiv → Bedeutung';
+      directionBanner.textContent = 'Zeitformen: Deutsch → alle 3 Formen (Infinitiv · Past · Partizip)';
+      questionLabel.textContent = 'Deutsch';
+      answerLabel.textContent = 'Alle 3 Formen';
+      answerInput.placeholder = 'z. B. go, went, gone';
     } else if (target === 'infinitive') {
       directionBanner.textContent = 'Zeitformen: Simple Past (1. Form) → Infinitiv (Grundform)';
+      questionLabel.textContent = 'Simple Past (1. Form)';
+      answerLabel.textContent = getVerbTargetLabel();
+      answerInput.placeholder = 'Englische Grundform (Infinitiv)';
     } else {
       directionBanner.textContent = `Zeitformen: Infinitiv (Grundform) → ${getVerbTargetLabel()}`;
+      questionLabel.textContent = 'Verb (Infinitiv, Grundform)';
+      answerLabel.textContent = getVerbTargetLabel();
+      answerInput.placeholder = target === 'meaning' ? 'Deutsche Bedeutung' : 'Englische Form';
     }
-    questionLabel.textContent = target === 'infinitive' ? 'Simple Past (1. Form)' : 'Verb (Infinitiv, Grundform)';
-    answerLabel.textContent = getVerbTargetLabel();
-    answerInput.placeholder = target === 'meaning'
-      ? 'Deutsche Bedeutung'
-      : target === 'infinitive'
-        ? 'Englische Grundform (Infinitiv)'
-        : 'Englische Form';
     document.querySelector('.ai-desc').textContent =
       'Der KI-Coach erklärt alle drei Formen, Form-Gruppen, Eselsbrücken und Beispielsätze (Basis: englisch-hilfen.de).';
   } else {
@@ -141,7 +150,7 @@ function syncModeUI() {
   });
   document.getElementById('dataset-field').classList.toggle('hidden', isTenses);
   document.getElementById('direction-field').classList.toggle('hidden', isTenses);
-  document.getElementById('target-field').classList.toggle('hidden', !isTenses);
+  document.getElementById('tenses-section').classList.toggle('hidden', !isTenses);
   document.getElementById('dataset-section').classList.toggle('hidden', isTenses);
   document.getElementById('addword-section').classList.toggle('hidden', isTenses);
   document.getElementById('total-words-label').textContent = isTenses ? 'Verben gesamt' : 'Wörter gesamt';
@@ -181,18 +190,8 @@ function rebuildVerbQueue() {
     return;
   }
   if (verbTarget === 'all') {
-    // „Alle 3 Formen + Bedeutung“-Modus: Jedes Verb wird nacheinander mit allen drei
-    // (sinnvolle Reihenfolge: 1. Form → 2. Form → deutsche Bedeutung), dazwischen neue Verben.
-    const expanded = [];
-    for (const verb of shuffle(verbs)) {
-      expanded.push(
-        { ...verb, target: 'past' },
-        { ...verb, target: 'participle' },
-        { ...verb, target: 'infinitive' },
-        { ...verb, target: 'meaning' }
-      );
-    }
-    verbQueue = shuffle(expanded);
+    // Standard-Format: Deutsches Wort → alle 3 Formen (eine Frage pro Verb).
+    verbQueue = shuffle(verbs.map(verb => ({ ...verb, target: 'all' })));
     return;
   }
   verbQueue = shuffle(verbs.map(verb => ({ ...verb, target: verbTarget })));
@@ -487,7 +486,11 @@ function renderUpcomingWords() {
   const seen = new Set();
   const nextWords = [];
   const pushUnique = item => {
-    const key = item.infinitive ? item.infinitive : `${item.english}|${item.german}`;
+    // Zeitformen-Modus: „swim → past“ und „swim → infinitive“ sind zwei verschiedene Fragen,
+    // deshalb wird die Ziel-Form in den Dedupe-Key aufgenommen.
+    const key = item.infinitive
+      ? `${item.infinitive}|${item.target || verbTarget}`
+      : `${item.english}|${item.german}`;
     if (seen.has(key)) return;
     seen.add(key);
     nextWords.push(item);
@@ -513,7 +516,7 @@ function renderUpcomingWords() {
     row.className = 'upcoming-item';
     if (item.infinitive) {
       const itemTarget = item.target || verbTarget;
-      const itemLabel = itemTarget === 'all' ? 'alle 3 + Bedeutung' : (verbTargetLabels[itemTarget] || itemTarget);
+      const itemLabel = itemTarget === 'all' ? 'alle 3 Formen' : (verbTargetLabels[itemTarget] || itemTarget);
       row.textContent = `${index + 1}. ${item.infinitive} → ${itemLabel}`;
     } else {
       const config = getDirectionConfig();
@@ -1067,16 +1070,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.querySelectorAll('#mode-toggle .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => setLearnMode(btn.dataset.mode));
-  });
-
-  document.getElementById('verb-target-select').addEventListener('change', (event) => {
-    verbTarget = event.target.value;
-    updateModeUI();
-    if (learnMode === 'tenses') {
-      document.getElementById('result').textContent = 'Frageart geändert – weiter mit dem aktuellen Verb.';
-      document.getElementById('result').className = 'hint';
-      renderCurrentVerb();
-    }
   });
 
   document.getElementById('check-btn').addEventListener('click', () => checkAnswer(false));

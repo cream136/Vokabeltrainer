@@ -19,19 +19,26 @@
     <aside class="sidebar">
       <h1>Vokabeltrainer</h1>
 
+      <section class="side-section hidden" id="tenses-section">
+        <h2>Zeitformen</h2>
+        <p class="tenses-desc">Frage: <strong>Deutsches Wort</strong><br>Antwort: <strong>alle 3 Formen</strong> (Infinitiv, Past, Partizip)</p>
+      </section>
+
       <section class="side-section" id="dataset-section">
-        <h2>Dataset verwalten</h2>
-        <div class="side-row">
-          <label for="dataset-name">Neu erstellen</label>
-          <input id="dataset-name" type="text" placeholder="Name ohne Extension" autocomplete="off">
-          <button id="create-dataset-btn">Erstellen</button>
+        <h2>Dataset</h2>
+        <div class="dataset-box">
+          <div class="ds-row">
+            <label for="dataset-name">Neu</label>
+            <input id="dataset-name" type="text" placeholder="Name" autocomplete="off">
+            <button id="create-dataset-btn">Erstellen</button>
+          </div>
+          <div class="ds-row">
+            <label for="dataset-rename">Umbenennen</label>
+            <input id="dataset-rename" type="text" placeholder="Neuer Name" autocomplete="off">
+            <button id="rename-dataset-btn">Umbenennen</button>
+          </div>
+          <button id="delete-dataset-btn" class="danger">Aktuelles Dataset löschen</button>
         </div>
-        <div class="side-row">
-          <label for="dataset-rename">Umbenennen</label>
-          <input id="dataset-rename" type="text" placeholder="Neuer Name ohne Extension" autocomplete="off">
-          <button id="rename-dataset-btn">Umbenennen</button>
-        </div>
-        <button id="delete-dataset-btn" class="danger">Aktuelles Dataset löschen</button>
       </section>
 
       <section class="side-section" id="addword-section">
@@ -88,16 +95,6 @@
           <select id="direction-select">
             <option value="de-en">Deutsch → Englisch</option>
             <option value="en-de">Englisch → Deutsch</option>
-          </select>
-        </div>
-        <div class="topbar-field hidden" id="target-field">
-          <label for="verb-target-select">Frageart</label>
-          <select id="verb-target-select">
-            <option value="all" selected>Alle 3 Formen + Bedeutung</option>
-            <option value="past">Simple Past (1. Form)</option>
-            <option value="participle">Past Participle (2. Form)</option>
-            <option value="infinitive">Infinitiv (Grundform)</option>
-            <option value="meaning">Bedeutung (Deutsch)</option>
           </select>
         </div>
       </div>

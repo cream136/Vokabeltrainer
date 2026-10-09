@@ -4,11 +4,11 @@ const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
-  '/modern.css',
   '/script.js',
   '/manifest.json',
   '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-512.png',
+  '/icons/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', (event) => {

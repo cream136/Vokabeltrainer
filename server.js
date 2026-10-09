@@ -395,13 +395,36 @@ app.post('/api/verb-check', (req, res) => {
   if (!verbRaw || !answer) {
     return res.status(400).json({ success: false, message: 'Verb und Antwort sind erforderlich.' });
   }
-  if (!['past', 'participle', 'meaning', 'infinitive'].includes(target)) {
-    return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: past, participle, meaning, infinitive.' });
+  if (!['all', 'past', 'participle', 'meaning', 'infinitive'].includes(target)) {
+    return res.status(400).json({ success: false, message: 'Ungültige Frageart. Zulässig: all, past, participle, meaning, infinitive.' });
   }
 
   const entry = findVerbEntry(verbRaw);
   if (!entry) {
     return res.status(404).json({ success: false, message: 'Dieses Verb ist nicht in der Liste der unregelmäßigen Verben enthalten.' });
+  }
+
+  if (target === 'all') {
+    // Standard-Frage: Deutsches Wort → alle 3 Formen (Infinitiv, Past, Partizip) in einer Antwort.
+    // Jede erwartete Form (inkl. Varianten wie „was/were“ oder „born (AE)“) muss vorkommen;
+    // fremde zusätzliche Wörter zählen als falsch.
+    const forms = [entry.infinitive, entry.past, entry.participle];
+    const variantsFor = form => splitVerbVariants(form).map(v => v.toLowerCase());
+    const allVariants = [...new Set(forms.flatMap(variantsFor))];
+    const answerTokens = answer.toLowerCase()
+      .split(/[\s,;]+/)
+      .map(token => token.replace(/\s*\(ae\)\s*/g, '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const covered = forms.every(form => variantsFor(form).some(v => answerTokens.includes(v)));
+    const noStrayTokens = answerTokens.length > 0 && answerTokens.every(token => allVariants.includes(token));
+    return res.json({
+      success: true,
+      correct: covered && noStrayTokens,
+      expected: forms.join(' · '),
+      accepted: allVariants,
+      target,
+      verb: entry
+    });
   }
 
   const expectedRaw = target === 'past' ? entry.past : target === 'participle' ? entry.participle : target === 'infinitive' ? entry.infinitive : entry.german;
