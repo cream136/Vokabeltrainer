@@ -68,13 +68,42 @@
                     </div>
                     <p class="setting-hint">Wird auf diesem Gerät gespeichert.</p>
                 </div>
-                <div class="setting-row local-only hidden">
-                    <label class="field-label" for="ai-proxy-url">KI-Server</label>
-                    <div class="ds-row">
-                        <input type="url" id="ai-proxy-url" placeholder="http://192.168.1.10:3000" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
-                        <button id="ai-proxy-save-btn" class="secondary">Speichern</button>
-                    </div>
-                    <p class="setting-hint">Adresse des Rechners, auf dem der Vokabeltrainer-Server läuft (<code>npm start</code>). Nur die KI-Hilfe braucht ihn – Vokabeln und Lernstand liegen auf diesem Gerät.</p>
+                <div class="setting-row local-only hidden" id="ai-settings">
+                    <h3>KI</h3>
+                    <p class="setting-hint">Die kostenlose Standard-KI benötigt Internet, aber keinen eingeschalteten PC und keine Anmeldung.</p>
+                    <details id="ai-advanced-settings">
+                        <summary>Erweiterte KI-Einstellungen (freiwillig)</summary>
+                        <label class="field-label" for="ai-provider">KI-Anbieter</label>
+                        <select id="ai-provider">
+                            <option value="standard">Kostenlose Standard-KI</option>
+                            <option value="custom">Eigener KI-Server (HTTPS)</option>
+                            <option value="openai">OpenAI – eigener API-Schlüssel (optional)</option>
+                            <option value="groq">Groq – eigener API-Schlüssel (optional)</option>
+                        </select>
+                        <div id="ai-own-options" class="hidden">
+                            <label class="field-label" for="ai-proxy-url">Eigene Serveradresse</label>
+                            <input type="url" id="ai-proxy-url" placeholder="https://mein-server.example" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
+                            <p class="setting-hint">Dein Server muss <code>POST /api/ai-helper</code> unterstützen.</p>
+                        </div>
+                        <div id="ai-key-options" class="hidden">
+                            <label class="field-label" for="ai-byok-key">Eigener API-Schlüssel</label>
+                            <input type="password" id="ai-byok-key" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Neuen API-Schlüssel eingeben">
+                            <p class="setting-hint">Der Schlüssel liegt ausschließlich im geschützten Schlüsselspeicher dieses Smartphones. Eigene Anbieter können Kosten verursachen und sind gegebenenfalls nicht für Minderjährige freigegeben.</p>
+                            <label class="field-label"><input type="checkbox" id="ai-byok-consent"> Ich stimme zu, dass meine Lernanfragen direkt an den gewählten KI-Anbieter gesendet werden, und bestätige, dass ich dessen Nutzungsbedingungen erfüllen darf.</label>
+                            <div class="ds-row">
+                                <button type="button" id="ai-byok-save" class="secondary">Schlüssel sicher speichern</button>
+                                <button type="button" id="ai-byok-remove" class="secondary">Schlüssel entfernen</button>
+                            </div>
+                            <p id="ai-byok-info" class="setting-hint" role="status"></p>
+                        </div>
+                        <div id="ai-fallback-wrap" class="hidden">
+                            <label class="field-label"><input type="checkbox" id="ai-fallback"> Bei Ausfall ausdrücklich zur Standard-KI wechseln</label>
+                            <p class="setting-hint">Falls aktiviert, verarbeitet unser Standarddienst bei einem Ausfall deine Lernanfrage.</p>
+                        </div>
+                        <button type="button" id="ai-settings-save" class="secondary">KI-Einstellungen speichern</button>
+                    </details>
+                    <p id="ai-settings-status" class="setting-hint" role="status" aria-live="polite"></p>
+                    <p class="setting-hint">Eigene API-Schlüssel: nur in der nativen iOS-/Android-App und nur bei verfügbarem Schlüsselspeicher.</p>
                 </div>
             </section>
 
@@ -208,6 +237,9 @@
 
     <script src="core.js"></script>
     <script src="storage.js"></script>
+    <script src="ai-config.js"></script>
+    <script src="ai-byok.js"></script>
+    <script src="ai-mobile.js"></script>
     <script src="script.js"></script>
     <script>
         // PWA: Service Worker registrieren (iOS Safari erlaubt SW nur mit HTTPS/localhost – Fehler sind harmlos)

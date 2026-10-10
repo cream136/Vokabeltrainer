@@ -4,12 +4,12 @@
   "webDir": "public",
   "backgroundColor": "#0E1013",
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": false
   },
   "ios": {
     "contentInset": "automatic"
   },
   "server": {
-    "cleartext": true
+    "cleartext": false
   }
 }

@@ -1027,7 +1027,10 @@ async function checkAnswer(autoNext = false) {
 
 // ── KI-Hilfe ──────────────────────────────────────────────────────────────────
 async function fetchAiHelper() {
-  const word = document.getElementById('english-word').textContent.trim();
+  // Auch bei Richtung Deutsch → Englisch immer den englischen Wörterbucheintrag erklären.
+  const word = (learnMode === 'words' && currentWord && currentWord.english)
+    ? currentWord.english
+    : document.getElementById('english-word').textContent.trim();
   const btnLabel = document.getElementById('ai-btn-label');
   const spinner = document.getElementById('ai-spinner');
   const resultDiv = document.getElementById('ai-result');
@@ -1054,9 +1057,11 @@ async function fetchAiHelper() {
   resultDiv.classList.remove('ai-error');
 
   try {
-    const data = await store.aiHelp(learnMode === 'tenses'
+    const payload = learnMode === 'tenses'
       ? { verb: currentVerb, target: activeVerbTarget(), userAnswer: lastVerbWrongAnswer }
-      : { word });
+      : { word };
+    // Storage-Abstraktion: Windows via Express/Ollama, Mobil via sicheren Router.
+    const data = await store.aiHelp(payload);
 
     if (data.success) {
       resultDiv.innerHTML = renderMarkdown(data.info);
@@ -1191,15 +1196,16 @@ async function setupLocalModeUI() {
     return;
   }
 
-  const settings = await store.getSettings();
-  const urlInput = document.getElementById('ai-proxy-url');
-  urlInput.value = settings.aiProxyUrl || '';
-  document.getElementById('ai-proxy-save-btn').addEventListener('click', async () => {
-    await store.saveSettings({ aiProxyUrl: urlInput.value.trim() });
-    const resultDiv = document.getElementById('result');
-    resultDiv.textContent = urlInput.value.trim() ? 'KI-Server gespeichert.' : 'KI-Server entfernt.';
-    resultDiv.className = 'correct';
-  });
+  // Standard-KI verbindet sich automatisch; eigene Server nur im erweiterten Bereich.
+  if (window.VTMobileAI) {
+    try {
+      await window.VTMobileAI.setup(store);
+    } catch (error) {
+      console.warn('KI-Einstellungen nicht verfügbar; das Lernsystem bleibt nutzbar.');
+      const info = document.getElementById('ai-settings-status');
+      if (info) info.textContent = 'KI-Einstellungen können gerade nicht geladen werden.';
+    }
+  }
 
   const fileInput = document.getElementById('import-csv-file');
   document.getElementById('import-csv-btn').addEventListener('click', () => fileInput.click());

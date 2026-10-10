@@ -386,26 +386,11 @@
     await this.writeKey(KEY_SETTINGS, this.settings);
   };
 
-  // KI-Hilfe: läuft über den Vokabeltrainer-Server als Proxy (API-Keys bleiben dort).
+  // Mobile KI: ausschließlich neuer KI-Router; niemals alte ungeschützte
+  // WLAN-HTTP-Fallbacks verwenden oder API-Schlüssel lokal unverschlüsselt speichern.
   LocalStore.prototype.aiHelp = async function (payload) {
-    const settings = await this.getSettings();
-    const base = (settings.aiProxyUrl || '').trim().replace(/\/+$/, '');
-    if (!base) {
-      return {
-        success: false,
-        message: 'Kein KI-Server eingetragen. Unter Einstellungen die Adresse des Vokabeltrainer-Servers eintragen (z. B. http://192.168.1.10:3000).'
-      };
-    }
-    try {
-      const response = await fetch(`${base}/api/ai-helper`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      return (await readJson(response)) || { success: false, message: `KI-Server antwortet nicht mit JSON (HTTP ${response.status}).` };
-    } catch (error) {
-      return { success: false, message: `KI-Server nicht erreichbar (${base}). Läuft dort „npm start“ und ist das Gerät im selben WLAN?` };
-    }
+    if (root.VTMobileAI) return root.VTMobileAI.aiHelp(payload);
+    return { success: false, message: 'Mobile KI-Komponente fehlt. Bitte App aktualisieren.' };
   };
 
   // ── Import / Export (nur lokal) ───────────────────────────────────────────
